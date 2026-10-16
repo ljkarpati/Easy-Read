@@ -6,6 +6,8 @@ import { parse, detectLang, makeTitle } from "./text.js";
 import { Speaker, supported as speechSupported, voicesFor, pickVoice, onVoicesChanged, voiceCount, voiceAdvice, isIOS } from "./speech.js";
 import { Reader } from "./reader.js";
 import { selfTest, customTheme } from "./contrast.js";
+import { kindOf, titleFromFile, readTextFile, readDocx, readPdf, recognize, cancelOcr, Cancelled, OCR_FIRST_DOWNLOAD } from "./import.js";
+import * as lookup from "./lookup.js";
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -16,6 +18,7 @@ const readerView = $("#reader");
 const input = $("#input");
 const lookSheet = $("#look-sheet");
 const settingsSheet = $("#settings-sheet");
+const lookupSheet = $("#lookup-sheet");
 const rowMenu = $("#row-menu");
 const alertDialog = $("#alert");
 
@@ -36,6 +39,8 @@ Press the play button to hear the text. Each sentence lights up as it is read. O
 While it reads, tap a sentence to jump there. When reading is stopped, tap a word to hear just that word. Then press play to read on from there.
 
 Tap an empty space to hide the buttons. Tap again to bring them back.
+
+No typing needed. On the home screen, tap Scan a page to take a photo of a printed page. Tap Look up to find a topic on Wikipedia. Open file reads PDFs and Word documents.
 
 Tap Aa to change the colors, the font, the size and the spacing. You can also turn on the reading ruler. It dims the lines above and below the one you are reading.
 
@@ -111,7 +116,7 @@ function openSheet(sheet, opener) {
   sheetOpener = opener || document.activeElement;
   const backdrop = $("#backdrop");
   backdrop.hidden = false;
-  backdrop.classList.toggle("dim", sheet === settingsSheet);
+  backdrop.classList.toggle("dim", sheet !== lookSheet);
   sheet.hidden = false;
   sheet.getBoundingClientRect(); // start the slide from the closed position
   sheet.classList.add("open");
@@ -182,7 +187,7 @@ function enableSheetDrag(sheet) {
   }
 }
 
-[lookSheet, settingsSheet].forEach((sheet) => {
+[lookSheet, settingsSheet, lookupSheet].forEach((sheet) => {
   sheet.tabIndex = -1;
   enableSheetDrag(sheet);
   sheet.querySelector("[data-close]").addEventListener("click", () => closeSheet());
@@ -399,7 +404,7 @@ function openDoc(id) {
   const parsed = parse(doc.text, lang);
   homeView.hidden = true;
   readerView.hidden = false;
-  reader.render(parsed, lang);
+  reader.render(parsed, lang, doc.source);
   $("#doc-title").textContent = doc.title;
   document.title = `${doc.title} – EasyRead`;
 
@@ -813,63 +818,276 @@ function insertText(text) {
   updateReadButton();
 }
 
-$("#paste-btn").addEventListener("click", async () => {
-  try {
-    const text = await navigator.clipboard.readText();
-    if (!text.trim()) {
-      toast("The clipboard is empty.");
-      return;
-    }
-    insertText(text);
-  } catch {
-    input.focus();
-    toast(coarse.matches ? "Press and hold to paste." : isMac ? "Press ⌘V to paste." : "Press Ctrl+V to paste.");
-  }
-});
-
-async function readTextFile(file) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes.subarray(2));
-  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes.subarray(2));
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    return new TextDecoder("windows-1252").decode(bytes); // older Windows files
-  }
-}
-
-async function openText(text, title) {
+async function openText(text, title, extra = {}) {
   const clean = text.trim();
-  const doc = library.findByText(clean) || (await library.add(title, clean));
+  const doc = library.findByText(clean) || (await library.add(title, clean, extra));
   cameFromHome = true;
   go("#/doc/" + encodeURIComponent(doc.id));
 }
 
-$("#open-btn").addEventListener("click", () => $("#file-input").click());
+/* ---------- Importing: photos, files and links ---------- */
 
-$("#file-input").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  e.target.value = "";
-  if (!file) return;
-  if (!/\.txt$/i.test(file.name) && file.type && !file.type.startsWith("text/")) {
-    toast("Please choose a .txt file.");
+const importButtons = ["#scan-btn", "#lookup-btn", "#paste-btn", "#open-btn"].map((s) => $(s));
+let importJob = 0;
+
+function showProgress(status, { note = "", fraction = null } = {}) {
+  const card = $("#import-progress");
+  card.hidden = false;
+  card.classList.toggle("indeterminate", fraction === null);
+  $("#import-status").textContent = status;
+  $("#import-note").textContent = note;
+  $("#import-bar").style.width = fraction === null ? "" : Math.round(fraction * 100) + "%";
+}
+
+function setBusy(busy) {
+  importButtons.forEach((b) => (b.disabled = busy));
+  $("#read-btn").disabled = busy || !input.value.trim();
+  if (!busy) $("#import-progress").hidden = true;
+}
+
+function ocrNote() {
+  try {
+    return localStorage.getItem("easyread.ocrReady") ? "" : `The first time, EasyRead downloads its text reader (${OCR_FIRST_DOWNLOAD}). After that it works offline.`;
+  } catch {
+    return "";
+  }
+}
+
+function markOcrReady() {
+  try {
+    localStorage.setItem("easyread.ocrReady", "1");
+  } catch {
+    // Storage blocked: the note just shows again next time.
+  }
+}
+
+function showOcrProgress(p, what = "the page") {
+  if (p.stage === "prepare") showProgress("Getting the text reader ready…", { note: ocrNote() });
+  else showProgress(`Reading ${what}…`, { fraction: p.progress });
+}
+
+// Scanned text goes into the text box first, so it can be checked
+// and fixed (and more pages added) before reading.
+function addScannedText(text) {
+  if (text.replace(/\s/g, "").length < 3) {
+    toast("No text found. Try again with the page flat, close and well lit.", 5000);
     return;
   }
-  const text = await readTextFile(file);
+  insertText(text);
+  homeView.scrollTop = 0;
+  toast("Check the text, then tap Read it. You can scan another page to add it.", 5000);
+}
+
+function importError(kind) {
+  if (!navigator.onLine && (kind === "image" || kind === "pdf")) return "The first scan needs internet to download the text reader.";
+  if (kind === "image") return "Couldn’t read that photo. Try again with the page flat and well lit.";
+  if (kind === "pdf") return "Couldn’t open that PDF.";
+  if (kind === "docx") return "Couldn’t open that Word document.";
+  return "Couldn’t open that file.";
+}
+
+async function importFile(file) {
+  const kind = kindOf(file);
+  if (!kind) {
+    toast("EasyRead can open photos, PDFs, Word documents (.docx) and text files.", 5000);
+    return;
+  }
+  const job = ++importJob;
+  const cancelled = () => job !== importJob;
+  const title = titleFromFile(file);
+  setBusy(true);
+  try {
+    if (kind === "text") {
+      const text = await readTextFile(file);
+      if (!text.trim()) toast("That file is empty.");
+      else await openText(text, title || makeTitle(text));
+    } else if (kind === "docx") {
+      showProgress("Opening the document…");
+      const text = await readDocx(file);
+      if (!text.trim()) toast("No text found in that document.");
+      else await openText(text, title || makeTitle(text));
+    } else if (kind === "image") {
+      const text = await recognize(file, (p) => showOcrProgress(p), cancelled);
+      markOcrReady();
+      if (!cancelled()) addScannedText(text);
+    } else if (kind === "pdf") {
+      const { text, scanned } = await readPdf(file, (p) => {
+        if (p.stage === "open") showProgress(p.pages ? `Opening the PDF… page ${p.page} of ${p.pages}` : "Opening the PDF…", { fraction: p.pages ? p.progress : null });
+        else showOcrProgress(p, p.pages > 1 ? `page ${p.page} of ${p.pages}` : "the page");
+      }, cancelled);
+      if (cancelled()) return;
+      if (scanned) {
+        markOcrReady();
+        addScannedText(text);
+      } else if (!text.trim()) {
+        toast("No text found in that PDF.");
+      } else {
+        await openText(text, title || makeTitle(text));
+      }
+    }
+  } catch (err) {
+    if (!(err instanceof Cancelled) && !cancelled()) {
+      console.warn("EasyRead import failed.", err);
+      toast(importError(kind), 5000);
+    }
+  } finally {
+    if (!cancelled()) setBusy(false);
+  }
+}
+
+$("#import-cancel").addEventListener("click", () => {
+  importJob++;
+  cancelOcr();
+  setBusy(false);
+  toast("Stopped.");
+});
+
+$("#scan-btn").addEventListener("click", () => $("#scan-input").click());
+$("#open-btn").addEventListener("click", () => $("#file-input").click());
+for (const id of ["#scan-input", "#file-input"]) {
+  $(id).addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (file) importFile(file);
+  });
+}
+
+// Wikipedia links work directly. Other websites block apps from reading
+// their pages, so for those the reader copies the text instead.
+async function importLink(url) {
+  const wiki = lookup.parseWikiLink(url);
+  if (!wiki) {
+    toast("EasyRead can’t open that link. Open the page, select the text and copy it, then tap Paste.", 6000);
+    return;
+  }
+  setBusy(true);
+  showProgress("Getting the article from Wikipedia…");
+  try {
+    const a = await lookup.article(wiki.title, wiki);
+    await openText(a.text, a.title, { source: { name: "Wikipedia", url: a.url } });
+    input.value = "";
+  } catch {
+    toast(navigator.onLine ? "Couldn’t get that article." : "Getting an article needs an internet connection.", 5000);
+  } finally {
+    setBusy(false);
+  }
+}
+
+$("#paste-btn").addEventListener("click", async () => {
+  let text;
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    input.focus();
+    toast(coarse.matches ? "Press and hold to paste." : isMac ? "Press ⌘V to paste." : "Press Ctrl+V to paste.");
+    return;
+  }
   if (!text.trim()) {
-    toast("That file is empty.");
+    toast("The clipboard is empty.");
     return;
   }
-  await openText(text, file.name.replace(/\.txt$/i, "").trim() || makeTitle(text));
+  if (lookup.isLink(text)) await importLink(text.trim());
+  else insertText(text);
 });
 
 $("#read-btn").addEventListener("click", async () => {
   const text = input.value;
   if (!text.trim()) return;
+  if (lookup.isLink(text)) {
+    await importLink(text.trim());
+    updateReadButton();
+    return;
+  }
   await openText(text, makeTitle(text));
   input.value = "";
   updateReadButton();
 });
+
+/* ---------- Look up (Wikipedia) ---------- */
+
+const lookupLang = (navigator.language || "en").slice(0, 2).toLowerCase();
+let lookupSimple = lookupLang === "en";
+let lookupAbort = null;
+$("#simple-switch").hidden = lookupLang !== "en";
+
+$("#lookup-btn").addEventListener("click", (e) => {
+  openSheet(lookupSheet, e.currentTarget);
+  $("#lookup-input").focus();
+});
+
+$("#simple-switch").addEventListener("click", () => {
+  lookupSimple = !lookupSimple;
+  $("#simple-switch").setAttribute("aria-checked", String(lookupSimple));
+  if ($("#lookup-input").value.trim()) runSearch();
+});
+
+$("#lookup-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  runSearch();
+});
+
+function lookupFailed(err) {
+  if (err.name === "AbortError") return;
+  $("#lookup-status").textContent = navigator.onLine ? "Wikipedia didn’t answer. Try again in a moment." : "Look up needs an internet connection.";
+}
+
+async function runSearch() {
+  const words = $("#lookup-input").value.trim();
+  if (!words) return;
+  lookupAbort?.abort();
+  lookupAbort = new AbortController();
+  const { signal } = lookupAbort;
+  const status = $("#lookup-status");
+  const list = $("#lookup-results");
+  list.replaceChildren();
+  status.textContent = "Searching…";
+  $("#lookup-input").blur(); // hide the keyboard so the results show
+  try {
+    let options = { lang: lookupLang, simple: lookupSimple };
+    let results = await lookup.search(words, options, signal);
+    let note = "";
+    if (!results.length && options.simple) {
+      options = { ...options, simple: false };
+      results = await lookup.search(words, options, signal);
+      if (results.length) note = "No simpler article found, so these come from the regular Wikipedia.";
+    }
+    if (!results.length) {
+      status.textContent = `Nothing found for “${words}”. Try other words.`;
+      return;
+    }
+    status.textContent = note;
+    list.replaceChildren(...results.map((r) => {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      const t = document.createElement("span");
+      t.className = "result-title";
+      t.textContent = r.title;
+      const sn = document.createElement("span");
+      sn.className = "result-snippet";
+      sn.textContent = r.snippet;
+      b.append(t, sn);
+      b.addEventListener("click", () => openArticle(r.title, options));
+      li.append(b);
+      return li;
+    }));
+  } catch (err) {
+    lookupFailed(err);
+  }
+}
+
+async function openArticle(title, options) {
+  lookupAbort?.abort();
+  lookupAbort = new AbortController();
+  $("#lookup-status").textContent = `Getting “${title}”…`;
+  try {
+    const a = await lookup.article(title, options, lookupAbort.signal);
+    closeSheet(true);
+    await openText(a.text, a.title, { source: { name: "Wikipedia", url: a.url } });
+  } catch (err) {
+    lookupFailed(err);
+  }
+}
 
 /* ---------- Keyboard (Mac and Windows) ---------- */
 

@@ -22,7 +22,7 @@ export class Reader {
 
   /* ---------- Rendering ---------- */
 
-  render(parsed, lang) {
+  render(parsed, lang, source = null) {
     const frag = document.createDocumentFragment();
     this.sentenceEls = new Array(parsed.sentences.length);
     for (const block of parsed.blocks) {
@@ -50,6 +50,18 @@ export class Reader {
         this.sentenceEls[idx] = span;
       });
       frag.appendChild(p);
+    }
+    if (source?.url) {
+      // Credit line (not read aloud). Wikipedia text is CC BY-SA 4.0.
+      const credit = document.createElement("p");
+      credit.className = "source";
+      const link = document.createElement("a");
+      link.href = source.url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = source.name;
+      credit.append("From ", link, ". Shared under the CC BY-SA 4.0 license.");
+      frag.appendChild(credit);
     }
     this.page.replaceChildren(frag);
     this.page.lang = lang;
@@ -279,6 +291,7 @@ export class Reader {
     scroller.addEventListener("click", (e) => {
       const sel = window.getSelection?.();
       if (sel && !sel.isCollapsed && sel.toString().trim()) return; // selecting text
+      if (e.target.closest?.("a")) return;
       if (this.rulerOn && !this.playing) this.moveBand(e.clientY - this.reader.getBoundingClientRect().top);
       const s = e.target.closest?.(".s");
       if (!s) {

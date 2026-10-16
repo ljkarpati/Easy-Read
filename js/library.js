@@ -1,5 +1,6 @@
 // library.js: saved documents in IndexedDB.
 // Each document: { id, title, text, createdAt, updatedAt, lastSentence }
+// plus an optional source: { name, url } for articles from Wikipedia.
 
 const DB_NAME = "easyread";
 const DB_VERSION = 1;
@@ -82,8 +83,8 @@ export function findByText(text) {
   return docs.find((d) => d.text === text) || null;
 }
 
-export async function add(title, text) {
-  const doc = newDoc(title, text);
+export async function add(title, text, extra = {}) {
+  const doc = { ...newDoc(title, text), ...extra };
   docs.push(doc);
   emit();
   await write((s) => s.put(doc));

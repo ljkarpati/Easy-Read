@@ -2,8 +2,10 @@
 // Serves the app from the cache first, so it opens in airplane mode
 // and makes no network requests after the first visit.
 // Bump VERSION whenever any app file changes, or devices keep the old copy.
+// The big text-reader and PDF files in /vendor are not listed: they are
+// cached the first time someone scans a page or opens a PDF.
 
-const VERSION = "easyread-v3";
+const VERSION = "easyread-v4";
 
 const SHELL = [
   "./",
@@ -17,6 +19,8 @@ const SHELL = [
   "./js/settings.js",
   "./js/library.js",
   "./js/contrast.js",
+  "./js/import.js",
+  "./js/lookup.js",
   "./fonts/lexend-latin-400-normal.woff2",
   "./fonts/lexend-latin-ext-400-normal.woff2",
   "./fonts/atkinson-hyperlegible-latin-400-normal.woff2",
