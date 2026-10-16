@@ -5,7 +5,7 @@
 // The big text-reader and PDF files in /vendor are not listed: they are
 // cached the first time someone scans a page or opens a PDF.
 
-const VERSION = "easyread-v4";
+const VERSION = "easyread-v5";
 
 const SHELL = [
   "./",

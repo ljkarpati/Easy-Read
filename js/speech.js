@@ -18,12 +18,17 @@ const QUALITY = /premium|enhanced|natural|neural/i;
 /* ---------- Voices ---------- */
 
 let voices = [];
+let voicesKey = "";
 const voiceListeners = new Set();
 
+// Safari hands back new voice objects on every call, so compare the
+// list by name, not by object, or the reader restarts for no reason.
 function refreshVoices() {
   const next = synth.getVoices() || [];
-  if (next.length === voices.length && next.every((v, i) => v === voices[i])) return;
+  const key = next.map((v) => v.voiceURI + "|" + v.name).join("\n");
+  if (key === voicesKey) return;
   voices = next;
+  voicesKey = key;
   voiceListeners.forEach((fn) => fn());
 }
 
@@ -63,8 +68,48 @@ export function voicesFor(lang, allowOnline = false) {
     .sort((a, b) => score(b, regionMatch) - score(a, regionMatch) || a.name.localeCompare(b.name));
 }
 
+/* ---------- Voices that turned out not to work ---------- */
+
+// Safari can list voices it cannot actually play (for example a voice
+// whose download was removed), and there is no way to tell in advance.
+// When a voice fails, EasyRead remembers it here and uses another one.
+const BROKEN_KEY = "easyread.brokenVoices";
+const broken = new Set(readBroken());
+const avoidThisVisit = new Set();
+
+function readBroken() {
+  try {
+    return JSON.parse(localStorage.getItem(BROKEN_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveBroken() {
+  try {
+    localStorage.setItem(BROKEN_KEY, JSON.stringify([...broken]));
+  } catch {
+    // Storage blocked: remembered for this visit only.
+  }
+}
+
+export function isBroken(voice) {
+  return !!voice && (broken.has(voice.voiceURI) || avoidThisVisit.has(voice.voiceURI));
+}
+
+// Called when the reader picks a voice themselves: give it another try.
+export function forgiveVoice(voice) {
+  if (!voice) return;
+  avoidThisVisit.delete(voice.voiceURI);
+  if (broken.delete(voice.voiceURI)) saveBroken();
+}
+
+export const DEVICE_DEFAULT = "default";
+
+// savedURI "default" means "let the device choose" (no voice set).
 export function pickVoice(lang, savedURI, allowOnline) {
-  const list = voicesFor(lang, allowOnline);
+  if (savedURI === DEVICE_DEFAULT) return null;
+  const list = voicesFor(lang, allowOnline).filter((v) => !isBroken(v));
   return list.find((v) => v.voiceURI === savedURI) || list[0] || null;
 }
 
@@ -79,10 +124,22 @@ export function voiceCount() {
 //   null:       a natural voice is already in use, or there is no fix to suggest.
 export function voiceAdvice(lang, allowOnline) {
   const best = voicesFor(lang, allowOnline)[0];
-  if (!best || QUALITY.test(best.name)) return null;
+  if (!best || QUALITY.test(best.name) || isBroken(best)) return null;
   if (isApple) return "download";
   if (!allowOnline && voicesFor(lang, true).some((v) => v.localService === false && QUALITY.test(v.name))) return "online";
   return null;
+}
+
+/* ---------- Audio session (iPhone) ---------- */
+
+// Safari 17+ lets a page ask to be treated like a media player, which
+// should keep speech audible when the ring/silent switch is on silent.
+function setAudioSession(type) {
+  try {
+    if (navigator.audioSession) navigator.audioSession.type = type;
+  } catch {
+    // Not supported: nothing to do.
+  }
 }
 
 /* ---------- Screen wake lock ---------- */
@@ -121,6 +178,19 @@ document.addEventListener("visibilitychange", () => {
 // Turns off for the rest of the session if a voice gives no word timing.
 let wordBoundaries = true;
 
+// Errors that mean "this voice can't speak", not "this sentence failed".
+const VOICE_ERRORS = new Set(["voice-unavailable", "synthesis-unavailable", "synthesis-failed", "language-unavailable"]);
+
+// A voice that "finishes" almost instantly made no sound. Normal speech
+// is about 2.5 to 3 words a second, and even one word takes longer
+// than 150 ms to say.
+function finishedTooFast(text, startedAt, rate) {
+  const words = (text.match(/\S+/g) || []).length;
+  if (!words) return false;
+  const expected = (words / 2.8) * 1000 / rate;
+  return performance.now() - startedAt < Math.max(words > 1 ? 150 : 80, expected * 0.15);
+}
+
 function findWord(words, charIndex) {
   let lo = 0;
   let hi = words.length - 1;
@@ -139,7 +209,8 @@ function findWord(words, charIndex) {
 
 export class Speaker {
   // handlers: onSentence(i, playing), onWord(i, wordIndex), onState(playing),
-  // onEnd(), onNoSound(), onUnsupported()
+  // onEnd(), onNoSound(), onUnsupported(),
+  // onVoiceFailed(voice): the voice didn't play; choose another with setVoice()
   constructor(handlers = {}) {
     this.h = handlers;
     this.sentences = [];
@@ -174,8 +245,9 @@ export class Speaker {
   }
 
   setVoice(voice) {
-    if (voice === this.voice) return;
+    const same = (voice?.voiceURI ?? null) === (this.voice?.voiceURI ?? null);
     this.voice = voice;
+    if (same) return;
     wordBoundaries = true; // give the new voice a fresh chance
     if (this.playing) this._speak();
   }
@@ -194,6 +266,7 @@ export class Speaker {
     this.index = this._clamp(index);
     this.playing = true;
     this.h.onState?.(true);
+    setAudioSession("playback");
     holdWake();
     this._speak();
   }
@@ -205,7 +278,10 @@ export class Speaker {
     this._clearTimers();
     if (supported && (synth.speaking || synth.pending)) synth.cancel();
     releaseWake();
-    if (wasPlaying) this.h.onState?.(false);
+    if (wasPlaying) {
+      setAudioSession("auto");
+      this.h.onState?.(false);
+    }
   }
 
   toggle() {
@@ -240,6 +316,43 @@ export class Speaker {
     synth.speak(u);
   }
 
+  // Plays a short sample so the reader hears a voice right after
+  // choosing it, and finds out at once if it doesn't work here.
+  sample(text) {
+    if (!supported || this.playing) return;
+    const gen = ++this.gen;
+    this._clearTimers();
+    if (synth.speaking || synth.pending) synth.cancel();
+    const u = this._utterance(text, this.rate);
+    let startedAt = performance.now();
+    u.onend = () => {
+      if (gen === this.gen && this.voice && finishedTooFast(text, startedAt, this.rate)) this._voiceFailed(true);
+    };
+    u.onerror = (e) => {
+      if (gen === this.gen && this.voice && VOICE_ERRORS.has(e.error)) this._voiceFailed(true);
+    };
+    this.utterance = u;
+    startedAt = performance.now();
+    synth.speak(u);
+  }
+
+  // The voice made no sound. permanent: remember it on this device;
+  // otherwise avoid it for this visit only (the cause may be elsewhere).
+  _voiceFailed(permanent) {
+    const bad = this.voice;
+    if (!bad) return;
+    if (permanent) {
+      broken.add(bad.voiceURI);
+      saveBroken();
+    } else {
+      avoidThisVisit.add(bad.voiceURI);
+    }
+    this.voice = null;
+    const gen = this.gen;
+    this.h.onVoiceFailed?.(bad); // usually calls setVoice(), which restarts the sentence
+    if (this.playing && gen === this.gen) this._speak();
+  }
+
   _utterance(text, rate) {
     const u = new SpeechSynthesisUtterance(text);
     if (this.voice) {
@@ -270,6 +383,7 @@ export class Speaker {
     let started = false;
     let gotWord = false;
     let done = false;
+    let speakAt = performance.now();
 
     u.onstart = () => {
       if (!live()) return;
@@ -304,12 +418,25 @@ export class Speaker {
       this._speak();
     };
 
-    u.onend = next;
+    u.onend = () => {
+      if (!live() || done) return;
+      if (this.voice && finishedTooFast(sentence.text, speakAt, this.rate)) {
+        done = true;
+        this._voiceFailed(true);
+        return;
+      }
+      next();
+    };
     u.onerror = (e) => {
       if (!live() || e.error === "interrupted" || e.error === "canceled") return;
       if (e.error === "not-allowed") {
         this.stop();
         this.h.onNoSound?.();
+        return;
+      }
+      if (this.voice && VOICE_ERRORS.has(e.error)) {
+        done = true;
+        this._voiceFailed(true);
         return;
       }
       next(); // skip a sentence the engine could not speak
@@ -321,14 +448,23 @@ export class Speaker {
     if (busy) {
       synth.cancel();
       // Safari can swallow a speak() that comes right after cancel().
-      this._timer(() => live() && synth.speak(u), 60);
+      this._timer(() => {
+        if (!live()) return;
+        speakAt = performance.now();
+        synth.speak(u);
+      }, 60);
     } else {
+      speakAt = performance.now();
       synth.speak(u);
     }
 
+    // Nothing started: try the device's default voice once. If that
+    // doesn't start either, the problem is the sound, not the voice.
     this._timer(() => {
-      if (live() && !started && this.playing) this.h.onNoSound?.();
-    }, 1200);
+      if (!live() || started || !this.playing) return;
+      if (this.voice) this._voiceFailed(false);
+      else this.h.onNoSound?.();
+    }, 1500);
 
     if (this.voice && this.voice.localService === false && !isSafari) {
       // Chrome cuts online voices off after about 15 seconds unless nudged.

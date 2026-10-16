@@ -3,7 +3,7 @@
 import * as settings from "./settings.js";
 import * as library from "./library.js";
 import { parse, detectLang, makeTitle } from "./text.js";
-import { Speaker, supported as speechSupported, voicesFor, pickVoice, onVoicesChanged, voiceCount, voiceAdvice, isIOS } from "./speech.js";
+import { Speaker, supported as speechSupported, voicesFor, pickVoice, onVoicesChanged, voiceCount, voiceAdvice, isIOS, isBroken, forgiveVoice, DEVICE_DEFAULT } from "./speech.js";
 import { Reader } from "./reader.js";
 import { selfTest, customTheme } from "./contrast.js";
 import { kindOf, titleFromFile, readTextFile, readDocx, readPdf, recognize, cancelOcr, Cancelled, OCR_FIRST_DOWNLOAD } from "./import.js";
@@ -492,6 +492,14 @@ const speaker = new Speaker({
   onUnsupported() {
     toast("This browser can’t read aloud. Try Safari, Chrome or Edge.", 5000);
   },
+  onVoiceFailed(bad) {
+    const s = settings.get();
+    const next = pickVoice(speaker.lang, s.voices[speaker.lang], s.onlineVoices);
+    speaker.setVoice(next);
+    syncVoiceSelect();
+    const instead = next ? `“${next.name}”` : "your device’s default voice";
+    toast(`“${bad.name}” didn’t play in this browser, so EasyRead switched to ${instead}.`, 6000);
+  },
 });
 
 $("#play-btn").addEventListener("click", () => speaker.toggle());
@@ -570,34 +578,42 @@ function syncVoiceSelect() {
     select.disabled = true;
     return;
   }
-  if (!list.length) {
-    select.add(new Option("Default voice", ""));
-    select.disabled = true;
-    if (voiceCount()) {
-      hint.textContent = `No ${languageName(lang)} voice is installed on this device. See Settings for how to add one.`;
-      hint.hidden = false;
-    }
-    return;
-  }
   select.disabled = false;
-  for (const v of list) select.add(new Option(v.name + (v.localService === false ? " (online)" : ""), v.voiceURI));
-  select.value = speaker.voice?.voiceURI || list[0].voiceURI;
+  for (const v of list) {
+    const label = v.name + (v.localService === false ? " (online)" : "") + (isBroken(v) ? " – didn’t play here" : "");
+    select.add(new Option(label, v.voiceURI));
+  }
+  select.add(new Option("Device default voice", DEVICE_DEFAULT));
+  select.value = speaker.voice?.voiceURI || DEVICE_DEFAULT;
 
-  const advice = voiceAdvice(lang, settings.get().onlineVoices);
-  if (advice === "download") {
-    hint.textContent = isIOS
-      ? "Sounds robotic? Download a free natural voice: open Settings → Accessibility → Spoken Content → Voices, pick your language, and choose one marked Premium or Enhanced. Then come back and pick it here."
-      : "Sounds robotic? Download a free natural voice: open System Settings → Accessibility → Spoken Content → System voice → Manage Voices, and choose one marked Premium or Enhanced. Then pick it here.";
+  const showHint = (text) => {
+    hint.textContent = text;
     hint.hidden = false;
-  } else if (advice === "online") {
-    hint.textContent = "Sounds robotic? This browser has more natural online voices. Turn on Online voices in Settings to use them. Your text is then sent to Google or Microsoft to be spoken.";
-    hint.hidden = false;
+  };
+  if (!list.length && voiceCount()) {
+    showHint(`No ${languageName(lang)} voice is installed on this device. See Settings for how to add one.`);
+  } else if (isIOS && list.some(isBroken)) {
+    showHint("Some voices on this iPhone don’t play in Safari, so EasyRead skips them. For the Siri voice, use Speak Screen: see Settings → Better voices.");
+  } else {
+    const advice = voiceAdvice(lang, settings.get().onlineVoices);
+    if (advice === "download") {
+      showHint(isIOS
+        ? "Sounds robotic? Download a free natural voice: open Settings → Accessibility → Spoken Content → Voices, pick your language, and choose one marked Premium or Enhanced. Then pick it here."
+        : "Sounds robotic? Download a free natural voice: open System Settings → Accessibility → Spoken Content → System voice → Manage Voices, and choose one marked Premium or Enhanced. Then pick it here.");
+    } else if (advice === "online") {
+      showHint("Sounds robotic? This browser has more natural online voices. Turn on Online voices in Settings to use them. Your text is then sent to Google or Microsoft to be spoken.");
+    }
   }
 }
 
+// Choosing a voice plays a short sample, so it's clear at once whether
+// it sounds good and whether it works in this browser.
 $("#voice-select").addEventListener("change", (e) => {
-  const voices = { ...settings.get().voices, [speaker.lang]: e.target.value };
+  const uri = e.target.value;
+  forgiveVoice(voicesFor(speaker.lang, true).find((v) => v.voiceURI === uri));
+  const voices = { ...settings.get().voices, [speaker.lang]: uri };
   settings.set({ voices });
+  speaker.sample("This is how I sound.");
 });
 
 onVoicesChanged(updateVoice);
