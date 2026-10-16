@@ -3,7 +3,7 @@
 // and makes no network requests after the first visit.
 // Bump VERSION whenever any app file changes, or devices keep the old copy.
 
-const VERSION = "easyread-v1";
+const VERSION = "easyread-v3";
 
 const SHELL = [
   "./",

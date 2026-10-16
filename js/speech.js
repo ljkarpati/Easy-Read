@@ -6,6 +6,7 @@ const synth = window.speechSynthesis;
 export const supported = !!(synth && window.SpeechSynthesisUtterance);
 
 export const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isApple = isIOS || /Mac/.test(navigator.platform || "");
 const isSafari = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
 
 // Sound-effect voices that Apple lists alongside real ones.
@@ -69,6 +70,19 @@ export function pickVoice(lang, savedURI, allowOnline) {
 
 export function voiceCount() {
   return voices.length;
+}
+
+// How the reader could get a more natural voice, if the best one
+// available is a basic (robotic-sounding) voice:
+//   "download": Apple devices offer free Enhanced and Premium voices.
+//   "online":   this browser has natural online voices, currently hidden.
+//   null:       a natural voice is already in use, or there is no fix to suggest.
+export function voiceAdvice(lang, allowOnline) {
+  const best = voicesFor(lang, allowOnline)[0];
+  if (!best || QUALITY.test(best.name)) return null;
+  if (isApple) return "download";
+  if (!allowOnline && voicesFor(lang, true).some((v) => v.localService === false && QUALITY.test(v.name))) return "online";
+  return null;
 }
 
 /* ---------- Screen wake lock ---------- */

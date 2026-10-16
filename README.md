@@ -9,8 +9,9 @@ People with dyslexia and other reading difficulties, and anyone with tired eyes 
 ## What it does
 
 - **Calm reading layout.** Cream background, left-aligned text, about 62 characters per line, generous line and letter spacing.
-- **Read aloud.** Uses the voices already on your device. Tap a sentence to jump there while reading. When stopped, tap a word to hear just that word.
+- **Read aloud.** Uses the voices already on your device. Tap a sentence to jump there while reading. When stopped, tap a word to hear just that word. The voice quality depends on the device: on iPhone, iPad and Mac, a free Premium or Enhanced voice sounds far more natural, and EasyRead shows how to get one when only a basic voice is installed.
 - **Look options (Aa).** Five themes plus Auto and a custom tint, three reading fonts (Lexend, Atkinson Hyperlegible, OpenDyslexic) or the system font, text size, spacing, line width and a reading ruler.
+- **Dyslexia mode.** One switch (under Aa, or in Settings) turns the whole app, buttons and menus included, into OpenDyslexic with extra-wide spacing. Turning it off brings back your previous font and spacing.
 - **Focus mode.** Tap an empty space to hide the buttons.
 - **Library.** Your texts are saved on the device and reopen where you left off.
 - **Works offline** after the first visit, and installs with Add to Home Screen (iPhone and iPad) or Add to Dock (Mac).

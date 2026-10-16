@@ -10,7 +10,7 @@ export const DEFAULTS = Object.freeze({
   customVars: null,
   font: "lexend",         // lexend | atkinson | opendyslexic | system
   size: null,             // null = 20px on phone, 22px on iPad and Mac
-  spacing: "comfortable", // normal | comfortable | wide | custom
+  spacing: "comfortable", // normal | comfortable | wide | extra | custom
   letter: 0.04,           // custom letter spacing in em; word spacing is 3.5x this
   lineHeight: 1.7,        // custom line spacing
   width: "medium",        // narrow | medium | wide
@@ -18,12 +18,15 @@ export const DEFAULTS = Object.freeze({
   rate: 1,
   voices: {},             // language -> voiceURI
   onlineVoices: false,
+  dyslexiaMode: false,    // OpenDyslexic + extra spacing across the whole app
+  beforeDyslexia: null,   // font and spacing to restore when it is turned off
 });
 
 export const SPACING = {
-  normal: { letter: 0, word: 0 },
-  comfortable: { letter: 0.04, word: 0.14 },
-  wide: { letter: 0.08, word: 0.28 },
+  normal: { letter: 0, word: 0, line: 1.7 },
+  comfortable: { letter: 0.04, word: 0.14, line: 1.7 },
+  wide: { letter: 0.08, word: 0.28, line: 1.7 },
+  extra: { letter: 0.12, word: 0.42, line: 2 },
 };
 
 export const WIDTHS = { narrow: 50, medium: 62, wide: 72 };
@@ -97,7 +100,7 @@ export function spacingValues() {
     return { letter: state.letter, word: +(state.letter * 3.5).toFixed(3), line: state.lineHeight };
   }
   const p = SPACING[state.spacing] || SPACING.comfortable;
-  return { letter: p.letter, word: p.word, line: 1.7 };
+  return { letter: p.letter, word: p.word, line: p.line };
 }
 
 export function apply() {
@@ -112,6 +115,7 @@ export function apply() {
     customKeys = Object.keys(vars);
   }
   root.dataset.theme = theme;
+  root.toggleAttribute("data-dyslexia", !!state.dyslexiaMode);
 
   root.style.setProperty("--read-font", FONTS[state.font] || FONTS.lexend);
   if (state.size) root.style.setProperty("--read-size", state.size + "px");

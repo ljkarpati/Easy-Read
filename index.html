@@ -29,6 +29,7 @@
         else t = "paper";
       }
       root.setAttribute("data-theme", t);
+      if (s.dyslexiaMode) root.setAttribute("data-dyslexia", "");
     })();
   </script>
   <script type="module" src="js/app.js"></script>
@@ -136,6 +137,13 @@
     </header>
     <div class="sheet-body">
       <div class="look-row">
+        <button class="switch-row" type="button" role="switch" data-dyslexia-switch aria-checked="false">
+          <span class="switch-text"><span class="switch-title">Dyslexia mode</span><span class="switch-sub">OpenDyslexic font and extra-wide spacing everywhere, including buttons and menus</span></span>
+          <span class="switch" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div class="look-row">
         <span class="row-label" id="theme-label">Theme</span>
         <div class="swatches" role="group" aria-labelledby="theme-label" id="theme-swatches">
           <button class="swatch-btn" type="button" data-theme-choice="auto" aria-pressed="false"><span class="swatch auto"></span><span class="swatch-label">Auto</span></button>
@@ -184,11 +192,12 @@
           <button type="button" data-value="normal" aria-pressed="false">Normal</button>
           <button type="button" data-value="comfortable" aria-pressed="false">Comfortable</button>
           <button type="button" data-value="wide" aria-pressed="false">Wide</button>
+          <button type="button" data-value="extra" aria-pressed="false">Extra</button>
           <button type="button" data-value="custom" aria-pressed="false">Custom</button>
         </div>
         <div class="custom-spacing" id="custom-spacing" hidden>
           <div class="row-head"><label class="row-label" for="letter-range">Letter and word spacing</label><span class="row-value" id="letter-value"></span></div>
-          <input type="range" id="letter-range" min="0" max="0.12" step="0.01">
+          <input type="range" id="letter-range" min="0" max="0.16" step="0.01">
           <div class="row-head"><label class="row-label" for="line-range">Line spacing</label><span class="row-value" id="line-value"></span></div>
           <input type="range" id="line-range" min="1.5" max="2.2" step="0.05">
         </div>
@@ -233,6 +242,12 @@
       <button class="done-btn" type="button" data-close>Done</button>
     </header>
     <div class="sheet-body">
+      <div class="group">
+        <button class="switch-row" type="button" role="switch" data-dyslexia-switch aria-checked="false">
+          <span class="switch-text"><span class="switch-title">Dyslexia mode</span><span class="switch-sub">OpenDyslexic font and extra-wide spacing everywhere, including buttons and menus. Some people find it easier to read.</span></span>
+          <span class="switch" aria-hidden="true"></span>
+        </button>
+      </div>
       <div class="group">
         <h3>About</h3>
         <p>EasyRead makes reading more comfortable. It shows any text in a calm, easy-to-read layout and can read it aloud, lighting up each sentence as it goes. It is free, has no ads and works without internet after your first visit.</p>

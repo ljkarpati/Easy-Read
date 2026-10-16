@@ -184,6 +184,26 @@
 
 /* Custom tint: settings.js sets the same properties inline on <html>. */
 
+/* Dyslexia mode: the whole interface uses OpenDyslexic with wide spacing. */
+:root[data-dyslexia] {
+  --ui-font: "OpenDyslexic", var(--sys-font);
+}
+
+:root[data-dyslexia] body {
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  word-spacing: 0.2em;
+}
+
+:root[data-dyslexia] :is(.large-title, .sidebar-title, .section-title) {
+  letter-spacing: 0.02em;
+}
+
+:root[data-dyslexia] .swatch-label {
+  font-size: 0.6875rem;
+  letter-spacing: 0;
+}
+
 /* ---------- Base ---------- */
 
 *,
@@ -668,19 +688,24 @@ button:disabled { cursor: default; }
 
 .player {
   position: absolute;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: calc(var(--safe-b) + 16px);
   z-index: 30;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  margin: 0 auto;
   padding: 6px;
-  border-radius: 999px;
+  border-radius: 34px;
   background: var(--surface);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   backdrop-filter: blur(20px) saturate(180%);
   box-shadow: var(--shadow), 0 0 0 1px var(--separator);
-  transform: translateX(-50%);
   transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 
@@ -750,9 +775,11 @@ button:disabled { cursor: default; }
 .reader.focus .player,
 .reader.focus .chip {
   opacity: 0;
-  transform: translate(-50%, 8px);
   pointer-events: none;
 }
+
+.reader.focus .player { transform: translateY(8px); }
+.reader.focus .chip { transform: translate(-50%, 8px); }
 
 /* ---------- Sheets ---------- */
 
@@ -1085,15 +1112,16 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(
 
 .switch-row {
   display: flex;
+  flex-wrap: wrap; /* at very large zoom the switch drops below the text */
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px 16px;
   width: 100%;
   min-height: 44px;
   text-align: left;
 }
 
-.switch-row .switch-text { display: flex; flex-direction: column; gap: 2px; }
+.switch-row .switch-text { display: flex; flex: 1 1 0; flex-direction: column; gap: 2px; }
 .switch-row .switch-title { font-weight: 500; }
 .switch-row .switch-sub { color: var(--muted); font-size: 0.8125rem; line-height: 1.35; }
 
@@ -1402,6 +1430,15 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(
 
   .sheet-grab { display: none; }
   .sheet-head { padding-top: 10px; }
+}
+
+/* ---------- Very narrow screens (small phones, or 200% zoom) ---------- */
+
+@media (max-width: 340px) {
+  .player { gap: 2px; padding: 4px; }
+  .player-btn { width: 44px; height: 44px; }
+  .player-btn.play { width: 48px; height: 48px; }
+  .speed-btn { min-width: 44px; margin: 0; padding: 0 8px; }
 }
 
 /* ---------- Reduced motion ---------- */

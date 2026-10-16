@@ -3,7 +3,7 @@
 import * as settings from "./settings.js";
 import * as library from "./library.js";
 import { parse, detectLang, makeTitle } from "./text.js";
-import { Speaker, supported as speechSupported, voicesFor, pickVoice, onVoicesChanged, voiceCount, isIOS } from "./speech.js";
+import { Speaker, supported as speechSupported, voicesFor, pickVoice, onVoicesChanged, voiceCount, voiceAdvice, isIOS } from "./speech.js";
 import { Reader } from "./reader.js";
 import { selfTest, customTheme } from "./contrast.js";
 
@@ -24,7 +24,7 @@ const coarse = window.matchMedia("(pointer: coarse)");
 const isMac = /Mac/.test(navigator.platform || "") && !isIOS;
 
 const RATES = [0.6, 0.8, 1, 1.2, 1.4, 1.6];
-const LAYOUT_KEYS = ["font", "size", "spacing", "letter", "lineHeight", "width"];
+const LAYOUT_KEYS = ["font", "size", "spacing", "letter", "lineHeight", "width", "dyslexiaMode"];
 
 const WELCOME_TITLE = "Welcome to EasyRead";
 const WELCOME_TEXT = `Welcome to EasyRead.
@@ -38,6 +38,8 @@ While it reads, tap a sentence to jump there. When reading is stopped, tap a wor
 Tap an empty space to hide the buttons. Tap again to bring them back.
 
 Tap Aa to change the colors, the font, the size and the spacing. You can also turn on the reading ruler. It dims the lines above and below the one you are reading.
+
+Dyslexia mode is also under Aa. It switches the whole app to the OpenDyslexic font with extra-wide spacing. Some people find it easier to read.
 
 Your texts are saved on this device, so you can come back to them. Nothing you read is sent anywhere.`;
 
@@ -575,6 +577,17 @@ function syncVoiceSelect() {
   select.disabled = false;
   for (const v of list) select.add(new Option(v.name + (v.localService === false ? " (online)" : ""), v.voiceURI));
   select.value = speaker.voice?.voiceURI || list[0].voiceURI;
+
+  const advice = voiceAdvice(lang, settings.get().onlineVoices);
+  if (advice === "download") {
+    hint.textContent = isIOS
+      ? "Sounds robotic? Download a free natural voice: open Settings → Accessibility → Spoken Content → Voices, pick your language, and choose one marked Premium or Enhanced. Then come back and pick it here."
+      : "Sounds robotic? Download a free natural voice: open System Settings → Accessibility → Spoken Content → System voice → Manage Voices, and choose one marked Premium or Enhanced. Then pick it here.";
+    hint.hidden = false;
+  } else if (advice === "online") {
+    hint.textContent = "Sounds robotic? This browser has more natural online voices. Turn on Online voices in Settings to use them. Your text is then sent to Google or Microsoft to be spoken.";
+    hint.hidden = false;
+  }
 }
 
 $("#voice-select").addEventListener("change", (e) => {
@@ -642,6 +655,7 @@ function syncLook() {
   $("#line-value").textContent = sp.line.toFixed(2);
 
   $("#ruler-switch").setAttribute("aria-checked", String(s.ruler));
+  syncDyslexiaSwitches();
   $("#rate-range").value = s.rate;
   $("#rate-value").textContent = s.rate.toFixed(1) + "×";
   $$('#look-sheet input[type="range"]').forEach(setPct);
@@ -717,10 +731,37 @@ $("#rate-range").addEventListener("input", (e) => {
 });
 $("#rate-range").addEventListener("change", (e) => settings.set({ rate: +e.target.value }));
 
+/* ---------- Dyslexia mode ---------- */
+
+// One switch, like Canvas: OpenDyslexic and extra-wide spacing for the
+// reading text and the whole interface. Turning it off restores the
+// font and spacing the reader had before.
+function setDyslexiaMode(on) {
+  const s = settings.get();
+  if (on === s.dyslexiaMode) return;
+  if (on) {
+    const before = { font: s.font, spacing: s.spacing, letter: s.letter, lineHeight: s.lineHeight };
+    setLayout({ dyslexiaMode: true, beforeDyslexia: before, font: "opendyslexic", spacing: "extra" });
+  } else {
+    const before = s.beforeDyslexia || { font: settings.DEFAULTS.font, spacing: settings.DEFAULTS.spacing };
+    setLayout({ dyslexiaMode: false, beforeDyslexia: null, ...before });
+  }
+}
+
+function syncDyslexiaSwitches() {
+  const on = String(settings.get().dyslexiaMode);
+  for (const sw of $$("[data-dyslexia-switch]")) sw.setAttribute("aria-checked", on);
+}
+
+for (const sw of $$("[data-dyslexia-switch]")) {
+  sw.addEventListener("click", () => setDyslexiaMode(!settings.get().dyslexiaMode));
+}
+
 /* ---------- Settings sheet ---------- */
 
 function syncSettingsSheet() {
   $("#online-switch").setAttribute("aria-checked", String(settings.get().onlineVoices));
+  syncDyslexiaSwitches();
 }
 
 $("#online-switch").addEventListener("click", () => settings.set({ onlineVoices: !settings.get().onlineVoices }));
