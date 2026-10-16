@@ -4,14 +4,282 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#FBF5E9">
-  <meta name="description" content="EasyRead makes reading more comfortable.">
+  <meta name="description" content="EasyRead makes reading more comfortable. Paste any text to see it in a calm layout and hear it read aloud.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="EasyRead">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>EasyRead</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preload" href="fonts/lexend-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
+  <script>
+    // Apply the saved theme before the first paint so there is no flash.
+    (function () {
+      var s = {};
+      try { s = JSON.parse(localStorage.getItem("easyread.settings") || "{}") || {}; } catch (e) {}
+      var root = document.documentElement;
+      var t = s.theme || "auto";
+      if (t === "auto") t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dusk" : "paper";
+      if (t === "custom") {
+        if (s.customVars) { for (var k in s.customVars) root.style.setProperty(k, s.customVars[k]); }
+        else t = "paper";
+      }
+      root.setAttribute("data-theme", t);
+    })();
+  </script>
+  <script type="module" src="js/app.js"></script>
 </head>
 <body>
-  <main class="home">
-    <h1 class="large-title">EasyRead</h1>
-  </main>
-  <script src="js/app.js" defer></script>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <!-- Icons from Lucide (ISC license, lucide.dev) -->
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><path d="M11 14h10"/><path d="M16 4h2a2 2 0 0 1 2 2v1.344"/><path d="m17 18 4-4-4-4"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"/><rect x="8" y="2" width="8" height="4" rx="1"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></symbol>
+    <symbol id="i-skip-back" viewBox="0 0 24 24"><path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z"/><path d="M3 20V4"/></symbol>
+    <symbol id="i-skip-forward" viewBox="0 0 24 24"><path d="M21 4v16"/><path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/></symbol>
+    <symbol id="i-sidebar" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-compose" viewBox="0 0 24 24"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="12" cy="9" r="1"/><circle cx="19" cy="9" r="1"/><circle cx="5" cy="9" r="1"/><circle cx="12" cy="15" r="1"/><circle cx="19" cy="15" r="1"/><circle cx="5" cy="15" r="1"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  </svg>
+
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar" aria-label="Library">
+      <header class="sidebar-head">
+        <h2 class="sidebar-title">Library</h2>
+        <button class="icon-btn" type="button" data-action="settings" aria-label="Settings"><svg class="icon"><use href="#i-settings"/></svg></button>
+        <button class="icon-btn" type="button" data-action="new" aria-label="New text"><svg class="icon"><use href="#i-compose"/></svg></button>
+      </header>
+      <ul class="doc-list" id="sidebar-list"></ul>
+      <p class="empty" id="sidebar-empty" hidden>Texts you read will appear here.</p>
+    </aside>
+
+    <main class="pane">
+      <section class="view home" id="home" aria-label="Home">
+        <div class="home-inner">
+          <header class="home-head">
+            <h1 class="large-title">EasyRead</h1>
+            <button class="icon-btn" type="button" data-action="settings" aria-label="Settings"><svg class="icon"><use href="#i-settings"/></svg></button>
+          </header>
+
+          <div class="composer">
+            <label for="input" class="visually-hidden">Text to read</label>
+            <textarea id="input" placeholder="Paste or type text…" spellcheck="true" autocapitalize="sentences"></textarea>
+            <div class="composer-actions">
+              <button class="pill-btn" type="button" id="paste-btn"><svg class="icon"><use href="#i-paste"/></svg>Paste</button>
+              <button class="pill-btn" type="button" id="open-btn"><svg class="icon"><use href="#i-file"/></svg>Open file</button>
+              <input type="file" id="file-input" accept=".txt,text/plain" hidden>
+            </div>
+            <button class="primary-btn" type="button" id="read-btn" disabled>Read it<svg class="icon"><use href="#i-arrow-right"/></svg></button>
+          </div>
+
+          <section class="recent" aria-labelledby="recent-title">
+            <h2 class="section-title" id="recent-title">Recent</h2>
+            <ul class="doc-list" id="home-list"></ul>
+            <p class="empty" id="home-empty" hidden>Texts you read will appear here.</p>
+          </section>
+        </div>
+      </section>
+
+      <section class="view reader" id="reader" aria-label="Reader" hidden>
+        <header class="topbar" id="topbar">
+          <div class="topbar-left">
+            <button class="nav-btn back" type="button" id="back-btn"><svg class="icon"><use href="#i-chevron-left"/></svg>Library</button>
+            <button class="icon-btn sidebar-toggle" type="button" id="sidebar-btn" aria-label="Hide library" aria-expanded="true"><svg class="icon"><use href="#i-sidebar"/></svg></button>
+          </div>
+          <h1 class="topbar-title" id="doc-title"></h1>
+          <div class="topbar-right">
+            <button class="aa-btn" type="button" id="aa-btn" aria-label="Look and voice" aria-haspopup="dialog" aria-expanded="false">Aa</button>
+          </div>
+        </header>
+
+        <div class="reader-scroll" id="scroller">
+          <article class="page" id="page"></article>
+        </div>
+
+        <div class="ruler" id="ruler" hidden>
+          <div class="ruler-mask top"></div>
+          <div class="ruler-mask bottom"></div>
+          <div class="ruler-handle" id="ruler-handle" aria-hidden="true"><svg class="icon"><use href="#i-grip"/></svg></div>
+        </div>
+
+        <button class="chip" type="button" id="back-chip" hidden>Back to reading</button>
+
+        <div class="player" id="player" role="group" aria-label="Read aloud">
+          <button class="player-btn" type="button" id="prev-btn" aria-label="Previous sentence"><svg class="icon filled"><use href="#i-skip-back"/></svg></button>
+          <button class="player-btn play" type="button" id="play-btn" aria-label="Play"><svg class="icon filled"><use href="#i-play"/></svg></button>
+          <button class="player-btn" type="button" id="next-btn" aria-label="Next sentence"><svg class="icon filled"><use href="#i-skip-forward"/></svg></button>
+          <button class="speed-btn" type="button" id="speed-btn" aria-label="Speed 1.0 times">1.0×</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="backdrop" id="backdrop" hidden></div>
+
+  <section class="sheet look-sheet" id="look-sheet" role="dialog" aria-modal="true" aria-labelledby="look-title" hidden>
+    <div class="sheet-grab"><div class="sheet-grabber"></div></div>
+    <header class="sheet-head">
+      <h2 id="look-title">Look</h2>
+      <button class="done-btn" type="button" data-close>Done</button>
+    </header>
+    <div class="sheet-body">
+      <div class="look-row">
+        <span class="row-label" id="theme-label">Theme</span>
+        <div class="swatches" role="group" aria-labelledby="theme-label" id="theme-swatches">
+          <button class="swatch-btn" type="button" data-theme-choice="auto" aria-pressed="false"><span class="swatch auto"></span><span class="swatch-label">Auto</span></button>
+          <button class="swatch-btn" type="button" data-theme-choice="paper" aria-pressed="false"><span class="swatch" style="background:#FBF5E9;color:#2B2620">Aa</span><span class="swatch-label">Paper</span></button>
+          <button class="swatch-btn" type="button" data-theme-choice="clear" aria-pressed="false"><span class="swatch" style="background:#F7F7F4;color:#26262A">Aa</span><span class="swatch-label">Clear</span></button>
+          <button class="swatch-btn" type="button" data-theme-choice="sky" aria-pressed="false"><span class="swatch" style="background:#EAF2F8;color:#1E2A35">Aa</span><span class="swatch-label">Sky</span></button>
+          <button class="swatch-btn" type="button" data-theme-choice="dusk" aria-pressed="false"><span class="swatch" style="background:#1F2023;color:#E6E2DA">Aa</span><span class="swatch-label">Dusk</span></button>
+          <button class="swatch-btn" type="button" data-theme-choice="night" aria-pressed="false"><span class="swatch" style="background:#17140F;color:#D9CBB3">Aa</span><span class="swatch-label">Night</span></button>
+          <button class="swatch-btn" type="button" data-theme-choice="custom" aria-pressed="false" aria-label="Custom tint"><span class="swatch add" id="custom-swatch"><svg class="icon"><use href="#i-plus"/></svg></span><span class="swatch-label">Tint</span></button>
+        </div>
+        <div class="tint-panel" id="tint-panel" hidden>
+          <div class="tint-row" role="group" aria-label="Suggested tints" id="tint-suggestions">
+            <button class="tint-chip" type="button" data-tint="#FFF6D6" style="background:#FFF6D6" aria-label="Butter" aria-pressed="false"></button>
+            <button class="tint-chip" type="button" data-tint="#FCE9D2" style="background:#FCE9D2" aria-label="Apricot" aria-pressed="false"></button>
+            <button class="tint-chip" type="button" data-tint="#E3ECF6" style="background:#E3ECF6" aria-label="Mist" aria-pressed="false"></button>
+            <button class="tint-chip" type="button" data-tint="#ECEAE5" style="background:#ECEAE5" aria-label="Stone" aria-pressed="false"></button>
+            <button class="tint-chip" type="button" data-tint="#26303D" style="background:#26303D" aria-label="Slate" aria-pressed="false"></button>
+            <label class="color-pick"><input type="color" id="tint-input" value="#E3ECF6" aria-label="Pick any background color">Any color</label>
+          </div>
+          <p class="tint-note" id="tint-note" role="status"></p>
+        </div>
+      </div>
+
+      <div class="look-row">
+        <span class="row-label" id="font-label">Font</span>
+        <div class="seg" role="group" aria-labelledby="font-label" data-setting="font">
+          <button type="button" data-value="lexend" aria-pressed="false">Lexend</button>
+          <button type="button" data-value="atkinson" aria-pressed="false">Atkinson</button>
+          <button type="button" data-value="opendyslexic" aria-pressed="false">OpenDyslexic</button>
+          <button type="button" data-value="system" aria-pressed="false">System</button>
+        </div>
+      </div>
+
+      <div class="look-row">
+        <div class="row-head"><label class="row-label" for="size-range">Size</label><span class="row-value" id="size-value"></span></div>
+        <div class="slider-row">
+          <span class="a-small" aria-hidden="true">A</span>
+          <input type="range" id="size-range" min="16" max="34" step="1">
+          <span class="a-large" aria-hidden="true">A</span>
+        </div>
+      </div>
+
+      <div class="look-row">
+        <span class="row-label" id="spacing-label">Spacing</span>
+        <div class="seg" role="group" aria-labelledby="spacing-label" data-setting="spacing">
+          <button type="button" data-value="normal" aria-pressed="false">Normal</button>
+          <button type="button" data-value="comfortable" aria-pressed="false">Comfortable</button>
+          <button type="button" data-value="wide" aria-pressed="false">Wide</button>
+          <button type="button" data-value="custom" aria-pressed="false">Custom</button>
+        </div>
+        <div class="custom-spacing" id="custom-spacing" hidden>
+          <div class="row-head"><label class="row-label" for="letter-range">Letter and word spacing</label><span class="row-value" id="letter-value"></span></div>
+          <input type="range" id="letter-range" min="0" max="0.12" step="0.01">
+          <div class="row-head"><label class="row-label" for="line-range">Line spacing</label><span class="row-value" id="line-value"></span></div>
+          <input type="range" id="line-range" min="1.5" max="2.2" step="0.05">
+        </div>
+      </div>
+
+      <div class="look-row">
+        <span class="row-label" id="width-label">Line width</span>
+        <div class="seg" role="group" aria-labelledby="width-label" data-setting="width">
+          <button type="button" data-value="narrow" aria-pressed="false">Narrow</button>
+          <button type="button" data-value="medium" aria-pressed="false">Medium</button>
+          <button type="button" data-value="wide" aria-pressed="false">Wide</button>
+        </div>
+      </div>
+
+      <div class="look-row">
+        <button class="switch-row" type="button" role="switch" id="ruler-switch" aria-checked="false">
+          <span class="switch-text"><span class="switch-title">Reading ruler</span><span class="switch-sub">Dims the lines above and below</span></span>
+          <span class="switch" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div class="look-row">
+        <label class="row-label" for="voice-select">Voice</label>
+        <span class="select-wrap">
+          <select id="voice-select"></select>
+          <svg class="icon"><use href="#i-chevron-left"/></svg>
+        </span>
+        <p class="hint" id="voice-hint" hidden></p>
+      </div>
+
+      <div class="look-row">
+        <div class="row-head"><label class="row-label" for="rate-range">Speed</label><span class="row-value" id="rate-value"></span></div>
+        <input type="range" id="rate-range" min="0.6" max="1.6" step="0.1">
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet settings-sheet" id="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+    <div class="sheet-grab"><div class="sheet-grabber"></div></div>
+    <header class="sheet-head">
+      <h2 id="settings-title">Settings</h2>
+      <button class="done-btn" type="button" data-close>Done</button>
+    </header>
+    <div class="sheet-body">
+      <div class="group">
+        <h3>About</h3>
+        <p>EasyRead makes reading more comfortable. It shows any text in a calm, easy-to-read layout and can read it aloud, lighting up each sentence as it goes. It is free, has no ads and works without internet after your first visit.</p>
+      </div>
+      <div class="group">
+        <h3>Privacy</h3>
+        <p>Your text never leaves this device. There are no accounts and no tracking.</p>
+      </div>
+      <div class="group">
+        <h3>Better voices</h3>
+        <p>On iPhone and iPad, open Settings → Accessibility → Spoken Content → Voices. Pick your language and download a voice marked Enhanced or Premium. It is free.</p>
+        <p>On a Mac, open System Settings → Accessibility → Spoken Content, then System voice → Manage Voices.</p>
+        <p>Then choose the new voice under Aa → Voice.</p>
+      </div>
+      <div class="group">
+        <button class="switch-row" type="button" role="switch" id="online-switch" aria-checked="false">
+          <span class="switch-text"><span class="switch-title">Online voices</span><span class="switch-sub">Some browsers offer extra voices that send your text to Google or Microsoft to be spoken. Off keeps your text on this device.</span></span>
+          <span class="switch" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div class="group buttons">
+        <button class="row-btn" type="button" id="reset-btn">Reset all settings</button>
+        <button class="row-btn danger" type="button" id="delete-all-btn">Delete all saved texts</button>
+      </div>
+      <p class="credits">Fonts: Lexend, Atkinson Hyperlegible and OpenDyslexic, under the SIL Open Font License. Icons: Lucide, under the ISC license.</p>
+    </div>
+  </section>
+
+  <div class="menu" id="row-menu" role="menu" hidden>
+    <button type="button" role="menuitem" data-menu="rename"><svg class="icon"><use href="#i-pencil"/></svg>Rename</button>
+    <button type="button" role="menuitem" data-menu="delete" class="danger"><svg class="icon"><use href="#i-trash"/></svg>Delete</button>
+  </div>
+
+  <dialog class="alert" id="alert">
+    <form method="dialog">
+      <div class="alert-body">
+        <h2 id="alert-title"></h2>
+        <p id="alert-msg"></p>
+        <input type="text" id="alert-input" hidden autocomplete="off" aria-labelledby="alert-title">
+      </div>
+      <div class="alert-actions">
+        <button type="submit" value="cancel" id="alert-cancel">Cancel</button>
+        <button type="submit" value="ok" id="alert-ok" class="strong">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
