@@ -1,56 +1,50 @@
-// settings.js: themes, fonts and spacing; saved to localStorage.
-
-import { customTheme } from "./contrast.js";
+// settings.js: theme, font, size, spacing and voice, saved to localStorage.
 
 const KEY = "easyread.settings";
 
 export const DEFAULTS = Object.freeze({
-  theme: "auto",          // auto | paper | clear | sky | dusk | night | custom
-  customBg: null,
-  customVars: null,
-  font: "lexend",         // lexend | atkinson | opendyslexic | system
-  size: null,             // null = 20px on phone, 22px on iPad and Mac
-  spacing: "comfortable", // normal | comfortable | wide | extra | custom
-  letter: 0.04,           // custom letter spacing in em; word spacing is 3.5x this
-  lineHeight: 1.7,        // custom line spacing
-  width: "medium",        // narrow | medium | wide
-  ruler: false,
+  theme: "auto",       // auto (follows the device until a swatch is tapped) | paper | sky | dusk | night
+  font: "dyslexic",    // dyslexic (OpenDyslexic) | standard (Atkinson Hyperlegible)
+  size: null,          // null = 19px on phone, 21px on iPad and Mac
+  spacing: "normal",   // normal | wide
+  ruler: false,        // line focus
   rate: 1,
-  voices: {},             // language -> voiceURI
-  onlineVoices: false,
-  dyslexiaMode: false,    // OpenDyslexic + extra spacing across the whole app
-  beforeDyslexia: null,   // font and spacing to restore when it is turned off
+  voices: {},          // language -> voiceURI
 });
 
 export const SPACING = {
-  normal: { letter: 0, word: 0, line: 1.7 },
-  comfortable: { letter: 0.04, word: 0.14, line: 1.7 },
-  wide: { letter: 0.08, word: 0.28, line: 1.7 },
-  extra: { letter: 0.12, word: 0.42, line: 2 },
+  normal: { letter: 0, word: 0, line: 1.8 },
+  wide: { letter: 0.06, word: 0.21, line: 2 },
 };
-
-export const WIDTHS = { narrow: 50, medium: 62, wide: 72 };
 
 const FONTS = {
-  lexend: '"Lexend", var(--sys-font)',
-  atkinson: '"Atkinson Hyperlegible", var(--sys-font)',
-  opendyslexic: '"OpenDyslexic", var(--sys-font)',
-  system: "var(--sys-font)",
+  dyslexic: '"OpenDyslexic", var(--sys-font)',
+  standard: '"Atkinson Hyperlegible", var(--sys-font)',
 };
 
-export const SIZE_MIN = 16;
-export const SIZE_MAX = 34;
+export const SIZE_MIN = 15;
+export const SIZE_MAX = 33;
+export const SIZE_STEP = 2;
 
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 const bigQuery = window.matchMedia("(min-width: 744px)");
 const listeners = new Set();
 let state = load();
-let customKeys = [];
+
+// Older saves used options that no longer exist; map them to today's.
+function migrate(saved) {
+  const s = { ...DEFAULTS, ...saved, voices: { ...(saved.voices || {}) } };
+  if (!FONTS[s.font]) s.font = s.font === "atkinson" ? "standard" : "dyslexic";
+  if (!SPACING[s.spacing]) s.spacing = s.spacing === "wide" || s.spacing === "extra" ? "wide" : "normal";
+  if (!["auto", "paper", "sky", "dusk", "night"].includes(s.theme)) s.theme = "paper";
+  for (const old of ["customBg", "customVars", "width", "letter", "lineHeight", "dyslexiaMode", "beforeDyslexia", "onlineVoices"]) delete s[old];
+  return s;
+}
 
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || "null");
-    if (saved && typeof saved === "object") return { ...DEFAULTS, ...saved, voices: { ...(saved.voices || {}) } };
+    if (saved && typeof saved === "object") return migrate(saved);
   } catch {
     // Storage blocked or corrupt: fall back to defaults.
   }
@@ -76,10 +70,6 @@ export function set(patch) {
   listeners.forEach((fn) => fn(state, patch));
 }
 
-export function reset() {
-  set({ ...DEFAULTS, voices: {} });
-}
-
 export function onChange(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);
@@ -87,45 +77,23 @@ export function onChange(fn) {
 
 export function resolvedTheme() {
   if (state.theme === "auto") return darkQuery.matches ? "dusk" : "paper";
-  if (state.theme === "custom" && !state.customVars) return "paper";
   return state.theme;
 }
 
 export function effectiveSize() {
-  return state.size || (bigQuery.matches ? 22 : 20);
-}
-
-export function spacingValues() {
-  if (state.spacing === "custom") {
-    return { letter: state.letter, word: +(state.letter * 3.5).toFixed(3), line: state.lineHeight };
-  }
-  const p = SPACING[state.spacing] || SPACING.comfortable;
-  return { letter: p.letter, word: p.word, line: p.line };
+  return state.size || (bigQuery.matches ? 21 : 19);
 }
 
 export function apply() {
   const root = document.documentElement;
-  const theme = resolvedTheme();
-
-  customKeys.forEach((k) => root.style.removeProperty(k));
-  customKeys = [];
-  if (theme === "custom") {
-    const vars = state.customVars || customTheme(state.customBg).vars;
-    for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
-    customKeys = Object.keys(vars);
-  }
-  root.dataset.theme = theme;
-  root.toggleAttribute("data-dyslexia", !!state.dyslexiaMode);
-
-  root.style.setProperty("--read-font", FONTS[state.font] || FONTS.lexend);
+  root.dataset.theme = resolvedTheme();
+  root.style.setProperty("--read-font", FONTS[state.font] || FONTS.dyslexic);
   if (state.size) root.style.setProperty("--read-size", state.size + "px");
   else root.style.removeProperty("--read-size");
-
-  const sp = spacingValues();
+  const sp = SPACING[state.spacing] || SPACING.normal;
   root.style.setProperty("--ls", sp.letter + "em");
   root.style.setProperty("--ws", sp.word + "em");
   root.style.setProperty("--lh", String(sp.line));
-  root.style.setProperty("--measure", String(WIDTHS[state.width] || WIDTHS.medium));
 
   const bg = getComputedStyle(root).getPropertyValue("--bg").trim();
   const meta = document.querySelector('meta[name="theme-color"]');

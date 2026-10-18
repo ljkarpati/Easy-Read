@@ -3,56 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>EasyRead icon concepts</title>
+  <title>EasyRead icon</title>
   <style>
-    :root { --bg: #FBF5E9; --text: #2B2620; --muted: #6B6255; --card: #FFFDF8; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+    body { margin: 0; background: #FBF5E9; color: #2B2620; font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
     main { max-width: 1100px; margin: 0 auto; padding: 32px 16px 64px; }
-    h1 { margin: 0 0 4px; font-size: 34px; letter-spacing: -0.02em; }
-    .lede { margin: 0 0 32px; color: var(--muted); }
-    .concept { margin: 0 0 40px; padding: 20px; border-radius: 16px; background: var(--card); box-shadow: 0 8px 30px rgba(0,0,0,.08); }
-    .concept h2 { margin: 0 0 4px; font-size: 22px; }
-    .concept p { margin: 0 0 16px; color: var(--muted); }
-    .tag { display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 999px; background: #F5C451; color: var(--text); font-size: 13px; font-weight: 600; vertical-align: 3px; }
-    .master { display: block; width: 100%; max-width: 1024px; height: auto; border-radius: 12px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+    h1 { margin: 0 0 24px; font-size: 34px; letter-spacing: -0.02em; }
+    .master { display: block; width: 100%; max-width: 1024px; height: auto; border-radius: 12px; }
     .sizes { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
     .stage { display: flex; align-items: flex-end; gap: 20px; padding: 20px; border-radius: 12px; }
-    .stage.light { background: #F2F2F7; }
-    .stage.dark { background: #1C1C1E; }
-    .stage figure { margin: 0; text-align: center; }
-    .stage figcaption { margin-top: 6px; font-size: 12px; color: #6E6E73; }
-    .stage.dark figcaption { color: #AEAEB2; }
-    .ios { border-radius: 22.37%; display: block; }
+    .light { background: #F2F2F7; }
+    .dark { background: #1C1C1E; }
+    figure { margin: 0; text-align: center; }
+    figcaption { margin-top: 6px; font-size: 12px; color: #6E6E73; }
+    .dark figcaption { color: #AEAEB2; }
+    .ios { display: block; border-radius: 22.37%; }
   </style>
 </head>
 <body>
   <main>
-    <h1>EasyRead icon concepts</h1>
-    <p class="lede">Each concept at 1024, 180, 60 and 32 pixels, on light and dark backgrounds. The 180 and 60 sizes are shown with iPhone-style rounded corners.</p>
-    <div id="concepts"></div>
+    <h1>EasyRead icon</h1>
+    <img class="master" src="icon.svg" width="1024" height="1024" alt="The EasyRead icon at 1024 pixels">
+    <div class="sizes">
+      <div class="stage light">
+        <figure><img class="ios" src="icon.svg" width="180" height="180" alt=""><figcaption>180</figcaption></figure>
+        <figure><img class="ios" src="icon.svg" width="60" height="60" alt=""><figcaption>60</figcaption></figure>
+        <figure><img src="favicon.svg" width="32" height="32" alt=""><figcaption>32</figcaption></figure>
+      </div>
+      <div class="stage dark">
+        <figure><img class="ios" src="icon.svg" width="180" height="180" alt=""><figcaption>180</figcaption></figure>
+        <figure><img class="ios" src="icon.svg" width="60" height="60" alt=""><figcaption>60</figcaption></figure>
+        <figure><img src="favicon.svg" width="32" height="32" alt=""><figcaption>32</figcaption></figure>
+      </div>
+    </div>
   </main>
-  <script>
-    const concepts = [
-      { file: "concept-a.svg", name: "A. Highlighted line", note: "Three lines of text; the middle one sits on an amber highlight.", inUse: true },
-      { file: "concept-b.svg", name: "B. Lowercase a", note: "A single Lexend a with a short amber underline." },
-      { file: "concept-c.svg", name: "C. Ruler", note: "Three lines; the top and bottom fade to 30%, like the reading ruler." },
-    ];
-    const root = document.getElementById("concepts");
-    for (const c of concepts) {
-      const sec = document.createElement("section");
-      sec.className = "concept";
-      const stage = (cls) => `<div class="stage ${cls}">
-          <figure><img class="ios" src="${c.file}" width="180" height="180" alt=""><figcaption>180</figcaption></figure>
-          <figure><img class="ios" src="${c.file}" width="60" height="60" alt=""><figcaption>60</figcaption></figure>
-          <figure><img src="${c.file}" width="32" height="32" alt=""><figcaption>32</figcaption></figure>
-        </div>`;
-      sec.innerHTML = `<h2>${c.name}${c.inUse ? '<span class="tag">In use</span>' : ""}</h2>
-        <p>${c.note}</p>
-        <img class="master" src="${c.file}" width="1024" height="1024" alt="${c.name} at 1024 pixels">
-        <div class="sizes">${stage("light")}${stage("dark")}</div>`;
-      root.appendChild(sec);
-    }
-  </script>
 </body>
 </html>

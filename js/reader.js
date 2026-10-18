@@ -1,4 +1,4 @@
-// reader.js: renders the reading view, ruler and focus mode.
+// reader.js: rendering, highlight, line focus and auto-scroll.
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
@@ -6,6 +6,8 @@ const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
 export class Reader {
   // els: { reader, scroller, page, ruler, handle, chip, topbar }
   // handlers: onTapSentence(i, wordIndex, wordEl), onTapEmpty()
+  // The top bar hides while reading aloud or scrolling down, and comes
+  // back on a tap or when scrolling up.
   constructor(els, handlers = {}) {
     Object.assign(this, els);
     this.h = handlers;
@@ -22,12 +24,31 @@ export class Reader {
 
   /* ---------- Rendering ---------- */
 
-  render(parsed, lang, source = null) {
+  // The document title is shown large at the top. If the text itself
+  // starts with the title line, that line becomes the heading (and is
+  // still read aloud) instead of appearing twice.
+  render(parsed, lang, title = "") {
     const frag = document.createDocumentFragment();
+    const norm = (t) => String(t).replace(/[\s.!?:;,…]+$/u, "").trim().toLowerCase();
+    const first = parsed.blocks[0];
+    const firstIsTitle = !!first && first.sentences.length === 1 && norm(parsed.sentences[first.sentences[0]].text) === norm(title);
+    this.heading = null;
+    if (title && !firstIsTitle) {
+      this.heading = document.createElement("h1");
+      this.heading.className = "doc-heading";
+      this.heading.textContent = title;
+      frag.appendChild(this.heading);
+    }
     this.sentenceEls = new Array(parsed.sentences.length);
-    for (const block of parsed.blocks) {
-      const p = document.createElement("p");
-      if (block.tight) p.className = "tight";
+    parsed.blocks.forEach((block, bi) => {
+      const asHeading = bi === 0 && firstIsTitle;
+      const p = document.createElement(asHeading ? "h1" : "p");
+      if (asHeading) {
+        p.className = "doc-heading";
+        this.heading = p;
+      } else if (block.tight) {
+        p.className = "tight";
+      }
       block.sentences.forEach((idx, k) => {
         if (k) p.appendChild(document.createTextNode(" "));
         const s = parsed.sentences[idx];
@@ -50,19 +71,7 @@ export class Reader {
         this.sentenceEls[idx] = span;
       });
       frag.appendChild(p);
-    }
-    if (source?.url) {
-      // Credit line (not read aloud). Wikipedia text is CC BY-SA 4.0.
-      const credit = document.createElement("p");
-      credit.className = "source";
-      const link = document.createElement("a");
-      link.href = source.url;
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.textContent = source.name;
-      credit.append("From ", link, ". Shared under the CC BY-SA 4.0 license.");
-      frag.appendChild(credit);
-    }
+    });
     this.page.replaceChildren(frag);
     this.page.lang = lang;
     this.current = -1;
@@ -70,8 +79,28 @@ export class Reader {
     this.following = true;
     this.chip.hidden = true;
     this.scroller.scrollTop = 0;
-    this.setFocus(false);
+    this.showBar();
+    this._watchHeading();
     this.updateRuler();
+  }
+
+  // Once the big title scrolls away, a small copy appears in the top bar.
+  _watchHeading() {
+    this.headingObserver?.disconnect();
+    this.topbar.classList.remove("titled");
+    if (!this.heading || !("IntersectionObserver" in window)) return;
+    this.headingObserver = new IntersectionObserver(([entry]) => {
+      this.topbar.classList.toggle("titled", !entry.isIntersecting);
+    }, { root: this.scroller, rootMargin: "-64px 0px 0px 0px" });
+    this.headingObserver.observe(this.heading);
+  }
+
+  showBar() {
+    this.reader.classList.remove("bar-hidden");
+  }
+
+  hideBar() {
+    this.reader.classList.add("bar-hidden");
   }
 
   /* ---------- Highlights ---------- */
@@ -118,8 +147,13 @@ export class Reader {
   setPlaying(playing) {
     this.playing = playing;
     this.sentenceEls[this.current]?.classList.toggle("paused", !playing);
-    if (playing) this.follow(false);
-    else this.chip.hidden = true;
+    if (playing) {
+      this.follow(false);
+      this.hideBar();
+    } else {
+      this.chip.hidden = true;
+      this.showBar();
+    }
     this.ruler.classList.toggle("animate", playing);
     this.ruler.classList.toggle("reading", playing);
     this.updateRuler();
@@ -132,7 +166,7 @@ export class Reader {
   }
 
   _barHeight() {
-    return this.reader.classList.contains("focus") ? 0 : this.topbar.offsetHeight;
+    return this.reader.classList.contains("bar-hidden") ? 0 : this.topbar.offsetHeight;
   }
 
   // Keeps the current sentence (or word, for very long sentences) in
@@ -207,17 +241,7 @@ export class Reader {
     this.updateRuler();
   }
 
-  /* ---------- Focus mode ---------- */
-
-  setFocus(on) {
-    this.reader.classList.toggle("focus", on);
-  }
-
-  get focused() {
-    return this.reader.classList.contains("focus");
-  }
-
-  /* ---------- Reading ruler ---------- */
+  /* ---------- Line focus ---------- */
 
   setRuler(on) {
     this.rulerOn = on;
@@ -313,6 +337,17 @@ export class Reader {
     scroller.addEventListener("pointerdown", (e) => {
       if (e.pointerType === "mouse" && e.target === scroller && e.offsetX > scroller.clientWidth) user(); // scrollbar
     });
+
+    // Top bar: hide on scroll down, show on scroll up or near the top.
+    let lastY = 0;
+    scroller.addEventListener("scroll", () => {
+      const y = scroller.scrollTop;
+      const dy = y - lastY;
+      lastY = y;
+      if (this.playing) return;
+      if (y < 40 || dy < -6) this.showBar();
+      else if (dy > 6) this.hideBar();
+    }, { passive: true });
 
     scroller.addEventListener("scroll", () => {
       if (!this.rulerOn || !this.playing || this.frame) return;

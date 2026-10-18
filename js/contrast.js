@@ -1,11 +1,6 @@
-// contrast.js: WCAG contrast math for themes and custom tint.
+// contrast.js: WCAG contrast self-test for the themes (development only).
 
-export const TARGET = 7;      // every reading pair aims for this
-export const MINIMUM = 4.5;   // custom tints below this are blocked
-
-const DARK_TEXT = "#24201B";
-const LIGHT_TEXT = "#F3EEE6";
-const AMBER = [245, 196, 81];
+export const TARGET = 7; // every text/background pair must reach this
 
 // "#abc", "#aabbcc", "rgb(1, 2, 3)" or "rgba(1, 2, 3, .5)" -> [r, g, b, a]
 export function parseColor(str) {
@@ -45,78 +40,6 @@ export function contrast(a, b) {
 export function blend(under, over) {
   const a = over[3] === undefined ? 1 : over[3];
   return [0, 1, 2].map((i) => under[i] * (1 - a) + over[i] * a);
-}
-
-const rgba = ([r, g, b], a) => `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${+a.toFixed(3)})`;
-
-// Builds every theme property for a user-picked background.
-// Returns { vars, ratio, level } where level is "ok", "warn" or "block".
-export function customTheme(bgHex) {
-  const bg = parseColor(bgHex);
-  const dark = parseColor(DARK_TEXT);
-  const light = parseColor(LIGHT_TEXT);
-  const darkRatio = contrast(dark, bg);
-  const lightRatio = contrast(light, bg);
-  const isDark = lightRatio > darkRatio;
-  const text = isDark ? light : dark;
-  const ratio = isDark ? lightRatio : darkRatio;
-  const level = ratio >= TARGET ? "ok" : ratio >= MINIMUM ? "warn" : "block";
-
-  // Fade the highlight until the text on it still reaches the target.
-  let hlAlpha = isDark ? 0.24 : 0.38;
-  while (hlAlpha > 0.12 && contrast(text, blend(bg, [...AMBER, hlAlpha])) < Math.min(TARGET, ratio)) hlAlpha -= 0.02;
-  const hl = [...AMBER, hlAlpha];
-  const underWord = blend(bg, hl);
-  const wordText = isDark ? [255, 255, 255] : text;
-  let wordAlpha = isDark ? 0.1 : 0.42;
-  while (wordAlpha > 0.06 && contrast(wordText, blend(underWord, [...AMBER, wordAlpha])) < Math.min(TARGET, ratio)) wordAlpha -= 0.02;
-
-  let mutedAlpha = 0.68;
-  while (mutedAlpha < 1 && contrast(blend(bg, [...text, mutedAlpha]), bg) < MINIMUM) mutedAlpha += 0.04;
-  const muted = blend(bg, [...text, Math.min(1, mutedAlpha)]);
-
-  const white = [255, 255, 255];
-  const vars = isDark
-    ? {
-        "color-scheme": "dark",
-        "--surface": rgba(blend(bg, [...white, 0.08]), 0.88),
-        "--surface-solid": toHex(blend(bg, [...white, 0.09])),
-        "--field": toHex(blend(bg, [...white, 0.05])),
-        "--fill": rgba(text, 0.08),
-        "--fill-strong": rgba(text, 0.14),
-        "--separator": rgba(text, 0.14),
-        "--accent": "#F2C14E",
-        "--on-accent": "#1F1C17",
-        "--danger": "#FF8A80",
-        "--shadow": "0 8px 30px rgba(0, 0, 0, 0.32)",
-        "--shadow-strong": "0 12px 40px rgba(0, 0, 0, 0.45)",
-      }
-    : {
-        "color-scheme": "light",
-        "--surface": rgba(blend(bg, [...white, 0.6]), 0.86),
-        "--surface-solid": toHex(blend(bg, [...white, 0.7])),
-        "--field": toHex(blend(bg, [...white, 0.7])),
-        "--fill": rgba(text, 0.06),
-        "--fill-strong": rgba(text, 0.11),
-        "--separator": rgba(text, 0.12),
-        "--accent": "#E9A93B",
-        "--on-accent": "#2B2620",
-        "--danger": "#B3261E",
-        "--shadow": "0 8px 30px rgba(0, 0, 0, 0.08)",
-        "--shadow-strong": "0 12px 40px rgba(0, 0, 0, 0.16)",
-      };
-
-  Object.assign(vars, {
-    "--bg": toHex(bg),
-    "--bg-rgb": bg.slice(0, 3).map(Math.round).join(", "),
-    "--text": toHex(text),
-    "--muted": toHex(muted),
-    "--hl": rgba(AMBER, hlAlpha),
-    "--word-bg": rgba(AMBER, wordAlpha),
-    "--word-text": toHex(wordText),
-  });
-
-  return { vars, ratio, level };
 }
 
 // Reads each theme straight from the stylesheet and checks it.

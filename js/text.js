@@ -126,7 +126,9 @@ export function makeTitle(text) {
   if (!t) return "Untitled";
   const firstLine = t.split("\n")[0].trim();
   const words = firstLine.split(/\s+/);
-  let title = t.includes("\n") && words.length <= 10 ? firstLine : words.slice(0, 6).join(" ") + (words.length > 6 ? "…" : "");
+  const useFirstLine = t.includes("\n") && words.length <= 10;
+  let title = useFirstLine ? firstLine : words.slice(0, 6).join(" ");
+  if (!useFirstLine && words.length > 6) title = title.replace(/[\s.,;:!?–—-]+$/u, "") + "…";
   if (title.length > 60) title = title.slice(0, 57).replace(/\s+\S*$/, "") + "…";
   return title;
 }

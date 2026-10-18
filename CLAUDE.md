@@ -1,25 +1,46 @@
-# EasyRead: build guide for Claude Code
+# EasyRead: build guide for Claude Code (v3)
 
 > **Read this whole file before writing any code.** Build one phase at a time, show the user the result, and wait for their OK before starting the next phase.
 >
 > **Practice build.** Claude Code writes all of the code. If this ever becomes a Congressional App Challenge entry, all AI use must be disclosed, and AI can't be the entire technical development.
 
+## Already built part of v1?
+
+Start with a short audit. List what exists, delete everything in **Cut from v1** below, then continue from the first unfinished phase. Keep any icon the user already chose.
+
+**Cut from v1:**
+- Settings screen
+- Custom tint and color picker
+- Clear theme
+- Lexend and System fonts
+- Line-width control
+- Spacing sliders
+- "…" row menus
+- Focus-mode tap toggle
+- Three icon concepts
+- All stretch goals
+
 ---
 
 ## 1. What we're building
 
-**EasyRead** makes any text easier to read. You paste, type or open some text. EasyRead shows it in a calm, dyslexia-friendly layout and can read it aloud, highlighting each sentence (and each word where the browser allows) as it goes.
+**EasyRead** makes any text easier to read. You paste text and it appears in a dyslexia-friendly font, with read-aloud that highlights each sentence as it goes.
 
-**Who it helps:** people with dyslexia and other reading difficulties, plus anyone with tired eyes or reading in a second language. It's for students, parents and older adults.
+**Who it helps:** people with dyslexia and other reading difficulties, tired eyes, or reading in a second language.
 
-**Where it runs:** in Safari on iPhone, iPad and Mac, and in Chrome or Edge on Windows. It installs with "Add to Home Screen" or "Add to Dock" and works offline after the first visit.
+**Where it runs:** for anyone who gets the link, with no account, no download and no cost. It runs in Safari on iPhone, iPad and Mac, in Chrome on Android, and in Chrome or Edge on Windows. It can also be installed to the Home Screen or Dock and works offline.
+
+**Design principle: Apple-clean.**
+- Every control must earn its place. If a feature isn't in this file, don't add it.
+- Use sensible defaults over options, and white space over decoration.
+- No emojis, no badges, no "tips" popups, no onboarding screens.
 
 **Hard rules**
-- **Free.** No paid services, no API keys, no accounts and no sign-in.
-- **Private.** All text stays on the device. No analytics, no tracking and no server.
-- **Simple stack.** Plain HTML, CSS and JavaScript with no frameworks and no build step. The folder works as-is when uploaded to any static host.
-- **Honest.** The app must never claim to treat or cure dyslexia. Approved wording: "Makes reading more comfortable."
-- **Looks premium.** Minimal, calm and Apple-like. Every screen should look like it belongs on an iPhone.
+- **Free.** No paid services, no API keys, no accounts.
+- **Private.** The user's text never leaves the device.
+- The only network use after the first load is the one-time download of the Natural voice model, which sends no user text.
+- **Simple stack.** Plain HTML, CSS and JavaScript, no frameworks, no build step, deployable as a static folder.
+- **Honest.** Never claim to treat or cure dyslexia. Approved wording: "Makes reading more comfortable."
 
 ---
 
@@ -27,16 +48,13 @@
 
 - The user is **new to coding** and uses a **Windows PC with PowerShell**.
   - Explain each step in one or two plain sentences.
-  - Give copy-paste commands for PowerShell.
-- **Ask before installing anything.** Only free tools are allowed.
-- **Prerequisites to check in Phase 0:** `node -v` and `git --version`.
-  - If Node.js is missing, ask the user to install the free **Node.js LTS** from nodejs.org. Node is only used for a local test server and for exporting icon PNGs.
-- **Testing on iPhone and iPad:** a plain `http://` address on the home Wi-Fi is not secure, so offline mode and the camera won't work there.
-  - Deploy to **GitHub Pages** (free, HTTPS) early and test on real devices from that link.
+  - Give copy-paste commands.
+- **Ask before installing anything.** Free tools only. Node.js LTS is fine.
+- **Testing on iPhone and iPad:** use the GitHub Pages HTTPS link. Plain `http://` addresses on the home Wi-Fi break offline mode and audio unlocking.
 - **After each phase:**
-  - Summarize what changed in three bullets or fewer.
-  - Tell the user exactly what to click or try.
-  - Commit with a clear message.
+  - Give at most three bullets on what changed.
+  - Tell the user exactly what to try.
+  - Commit.
 
 ---
 
@@ -44,369 +62,444 @@
 
 ```
 easyread/
-  index.html              # single page, all screens
+  index.html
   styles.css
   js/
-    app.js                # boot, routing between screens
-    text.js               # splitting text into paragraphs, sentences, words
-    reader.js             # rendering the reading view, ruler, focus mode
-    speech.js             # read-aloud engine
-    settings.js           # themes, fonts, spacing; saved to localStorage
-    library.js            # saved documents in IndexedDB
-    contrast.js           # WCAG contrast math for themes and custom tint
-  fonts/                  # self-hosted .woff2 files (needed offline)
-  icons/                  # icon.svg + exported PNGs
+    app.js           # boot + routing (Library ⇄ Reader)
+    text.js          # paragraphs → sentences → words
+    reader.js        # rendering, highlight, line focus, auto-scroll
+    voice-device.js  # Web Speech engine
+    voice-natural.js # Kokoro engine (main-thread side)
+    kokoro.worker.js # Kokoro runs here, off the main thread
+    settings.js      # theme, font, size, spacing, voice → localStorage
+    library.js       # IndexedDB
+    contrast.js      # WCAG contrast self-test (dev only)
+  fonts/             # self-hosted .woff2
+  icons/
   manifest.webmanifest
-  sw.js                   # service worker for offline
+  sw.js
   README.md
 ```
 
-Wrap every `localStorage` call in try/catch, and make the app still work if storage is blocked.
+Wrap every `localStorage` call in try/catch.
 
 ---
 
-## 4. Layout (phone first, then iPad and Mac)
+## 4. Screens
 
-### Home screen
+There are only two screens and one sheet.
+
+### Library (home)
 
 ```
 ┌────────────────────────────┐
-│ EasyRead               ⚙︎  │  ← large bold title, Apple style
+│ EasyRead               ＋  │  ← large title; + opens New sheet
 │                            │
-│ ┌────────────────────────┐ │
-│ │ Paste or type text…    │ │  ← big rounded text box, min 16px
-│ │                        │ │     (16px stops iOS zooming in)
-│ └────────────────────────┘ │
-│  [ Paste ]  [ Open file ]  │  ← secondary pill buttons
+│ Science worksheet          │  ← title in reading font
+│ Photosynthesis is how…  2m │  ← one-line preview, muted, time ago
+│ ────────────────────────── │
+│ Letter from school         │
+│ Dear families, next…    1d │
 │                            │
-│  [        Read it  →     ] │  ← primary button, full width
-│                            │
-│  Recent                    │
-│  ▸ Science worksheet   2m  │  ← rows: title + time ago
-│  ▸ Letter from school  1d  │
+│ Your text stays on this    │  ← one muted footer line, nothing else
+│ device.                    │
 └────────────────────────────┘
 ```
 
-- **Paste** uses the Clipboard API. If permission is denied, focus the text box and say "Press and hold to paste."
-- **Open file** accepts `.txt` in Phase 1. PDF and photo-of-a-page come later as stretch goals.
-- On first launch, Recent contains one sample document called "Welcome to EasyRead." It explains the features in very short sentences.
+- **Empty state:** centered "Paste something to read." with one big Paste button.
+- **First launch:** the library holds one short "Welcome to EasyRead" document, five sentences or fewer.
+- **Delete:** swipe left to delete on touch, with no extra confirmation because Undo appears as a toast. On Mac, right-click → Delete.
+- **New sheet (＋):**
+  - A full-height sheet with an autofocused text box (16px or larger, so iOS doesn't zoom in).
+  - Two quiet pills: Paste and Open .txt.
+  - Read at the top right, Apple's "Done" position.
+  - Cancel at the top left.
 
-### Reader screen
+### Reader
 
 ```
 ┌────────────────────────────┐
-│ ‹ Library   Title      Aa  │  ← thin top bar; Aa opens Look sheet
+│ ‹                      Aa  │  ← fades away while reading/scrolling
 │                            │
-│   Lorem ipsum text in a    │
-│   calm column, left-       │
-│   aligned, never justified.│
-│  ▓▓ Current sentence is ▓▓ │  ← soft highlight while reading aloud
-│  ▓▓ highlighted.        ▓▓ │
+│   Text in OpenDyslexic,    │
+│   left-aligned, calm       │
+│   column.                  │
+│  ▓ Current sentence ▓      │
 │   Next lines…              │
 │                            │
-│   ╭────────────────────╮   │
-│   │  ⏮    ▶︎    ⏭   1.0× │   │  ← floating pill player, bottom
-│   ╰────────────────────╯   │     respects safe-area inset
+│           ( ▶︎ )            │  ← one round play button, bottom center
 └────────────────────────────┘
 ```
 
-**Taps and clicks**
-- Tap a sentence to start reading from there.
-- While stopped, tap a single word to hear just that word, slowly.
-- Tap empty space to enter **Focus mode**, which fades the top bar and player away. Tap again to bring them back.
+- While playing, the play button grows into a pill: ⏮  ⏸  ⏭  1×.
+  - The 1× cycles through 0.75 → 1 → 1.25 → 1.5.
+  - Use a 250ms spring-like ease. Respect `prefers-reduced-motion`.
+- **Taps:**
+  - Tap a sentence to read from there.
+  - While stopped, tap a word to hear just that word, slowly.
+- **Top bar:** hides on scroll down or while playing, and shows on tap or scroll up.
+- **Title:** tap the title to rename it. It appears small in the top bar once you scroll.
+- **iPad and Mac (900px wide or more):** the library becomes a left sidebar, and the text column is centered.
+- **Keyboard:**
+  - `Space`: play or pause.
+  - `←` / `→`: previous or next sentence.
+  - `Esc`: close the sheet.
 
-**iPad and Mac (900px wide or more)**
-- The library becomes a left sidebar.
-- The text stays in a centered column with wide margins.
-- The Look sheet becomes a popover instead of a bottom sheet.
+### "Aa" sheet (like Apple Books)
 
-**Mac keyboard shortcuts**
-- `Space`: play or pause.
-- `←` / `→`: previous or next sentence.
-- `+` / `-`: text size.
-- `Esc`: close the sheet.
-
-### "Aa" Look sheet (bottom sheet on phone)
+A bottom sheet on phone and a popover on iPad and Mac:
 
 ```
-Theme     ( Auto ) ( Paper ) ( Clear ) ( Sky ) ( Dusk ) ( Night ) ( + )
-Font      [ Lexend | Atkinson | OpenDyslexic | System ]
-Size      A  ───────●─────  A
-Spacing   [ Normal | Comfortable | Wide ]      ← preset; "Custom" reveals sliders
-Line width[ Narrow | Medium | Wide ]
-Ruler     ( toggle )
-Voice     [ picker ]   Speed  ──●──
+  ( A )  ( A )                     ← smaller / bigger text
+  (Aa) (Aa) (Aa) (Aa)              ← Paper, Sky, Dark, Night swatches
+  Font     [ Dyslexic | Standard ]
+  Spacing  [ Normal   | Wide     ]
+  Line focus                  (●)
+  Voice                 Natural ›  ← pushes Voice list (section 6)
 ```
 
-- Preview changes live behind the sheet.
-- Save the settings to `localStorage`.
-
-### Settings (⚙︎)
-
-- **About:** one paragraph.
-- **Privacy:** "Your text never leaves this device."
-- **Better voices:** a tip about enhanced voices on Apple devices (Settings → Accessibility → Spoken Content → Voices).
-- **Reset:** reset all settings.
-- **Delete:** delete all saved documents, with a confirmation.
+That's all of it. Changes preview live behind the sheet and are saved.
 
 ---
 
-## 5. Look and feel
+## 5. Look
 
-### Reading defaults (based on the British Dyslexia Association style guide)
+### Reading text
 
-- **Background:** dark text on a light, **not pure white**, background. The default theme is **Paper**, a cream background.
-- **Line spacing:** 1.7 by default, adjustable from 1.5 to 2.2.
-- **Line length:** about 62 characters (`max-width: 62ch`). Narrow = 50ch, Wide = 72ch.
-- **Alignment:** left-aligned, never justified.
-- **Emphasis:** no italics and no underlines; use bold for emphasis.
-- **Spacing presets:**
+The reading font is used for everything the user reads: document text, titles and previews.
 
-  | Preset | Letter spacing | Word spacing |
-  |---|---|---|
-  | Normal | 0 | 0 |
-  | Comfortable | 0.04em | 0.14em |
-  | Wide | 0.08em | 0.28em |
+**Fonts.** Self-host the `.woff2` files from Fontsource via npm, then copy them into `/fonts`. Check the package names first.
 
-  The default is **Comfortable**. In Custom, word spacing always equals **3.5 × letter spacing**.
-- **Paragraph gap:** 1.2em.
-- **Text size:** 20px on phone and 22px on iPad and Mac by default. The slider runs from 16 to 34px.
-- **Zoom:** never disable pinch-zoom.
+| Font option | Font | Weights | Notes |
+|---|---|---|---|
+| Dyslexic (default) | OpenDyslexic, `@fontsource/opendyslexic` | 400 for body, 700 for titles | OFL-1.1 license. The heavy-bottomed letters are the look the user wants. |
+| Standard | Atkinson Hyperlegible, `@fontsource/atkinson-hyperlegible` | | |
+
+Do not use Dyslexie. It's a paid font.
+
+**Size**
+- Defaults: 19px on phone and 21px on iPad and Mac.
+- The A / A buttons step by 2px, from 15px to 33px.
+
+**Spacing** (default Normal; Wide gives the airy Canvas-style look)
+
+| | Letter spacing | Word spacing | Line height |
+|---|---|---|---|
+| Normal | 0 | 0 | 1.8 |
+| Wide | 0.06em | 0.21em (3.5× letter) | 2.0 |
+
+**Layout**
+- Column width: `max-width: 60ch`. Left-aligned, never justified.
+- Paragraph gap: 1em.
+- No italics and no underlines in rendered text.
+- Never disable pinch-zoom.
+
+**Line focus.** A band about 2 lines tall stays at full strength and the rest dims to 35%.
+- While reading aloud: it follows the spoken sentence.
+- Otherwise: it follows a tap or drag, or the mouse.
 
 ### Themes
 
-Store each theme as CSS custom properties on `:root[data-theme=…]`. Every text/background pair must reach a WCAG contrast of **at least 7:1**. Add a small self-test in `contrast.js` that logs a warning if any theme falls below that.
+Each theme is a set of CSS custom properties. Every text/background pair must reach a contrast of **7:1 or more**. `contrast.js` asserts this in development.
 
-| Theme | Background | Text | Sentence highlight | Use |
+| Theme | Background | Text | Sentence highlight | Current word |
 |---|---|---|---|---|
-| Paper (default) | `#FBF5E9` | `#2B2620` | `rgba(245,196,81,.38)` | everyday |
-| Clear | `#F7F7F4` | `#26262A` | `rgba(120,170,255,.28)` | people who prefer white-ish |
-| Sky | `#EAF2F8` | `#1E2A35` | `rgba(245,196,81,.40)` | soft blue |
-| Dusk | `#1F2023` | `#E6E2DA` | `rgba(245,196,81,.24)` | dark mode, not pure black |
-| Night | `#17140F` | `#D9CBB3` | `rgba(230,170,90,.22)` | bedtime, warm and dim |
+| Paper (default light) | `#FBF5E9` | `#2B2620` | `rgba(245,196,81,.35)` | `rgba(245,196,81,.75)` + 2px underline |
+| Sky | `#EAF2F8` | `#1E2A35` | `rgba(245,196,81,.38)` | same idea |
+| Dark (default dark) | `#1C1C1E` | `#E5E5E7` | `rgba(245,196,81,.22)` | `rgba(245,196,81,.45)` |
+| Night (warm, bedtime) | `#17140F` | `#D9CBB3` | `rgba(230,170,90,.20)` | `rgba(230,170,90,.42)` |
 
-**Auto:** follows the system. Light mode uses Paper and dark mode uses Dusk, through `prefers-color-scheme`. This is the first-launch setting.
+- **First launch:** follow the device's light or dark mode (Paper or Dark) until the user taps a swatch.
+- **Toolbar:** update `<meta name="theme-color">` on every theme change.
 
-**"+" Custom tint:** the user picks any background color.
-- Pick dark or light text automatically, whichever has the better contrast.
-- Show a small warning if contrast is under 7:1.
-- Block anything under 4.5:1.
-- Avoid suggesting green or red/pink tints, since they're hard for color-blind users.
+### Interface
 
-Update `<meta name="theme-color">` to match the theme so Safari's toolbar blends in.
-
-The current **word** while speaking gets a stronger tint plus a 2px rounded underline in the theme's accent.
-
-### App interface (everything that isn't the reading text)
-
-- **Font:** `-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`.
-  - Optional nice touch: on iOS, set the root size with `font: -apple-system-body` so the app follows the phone's text-size setting.
-- **Accent color:** warm amber `#E9A93B` in light themes and `#F2C14E` in dark themes.
-  - Primary buttons use ink-colored text on amber. Check the contrast.
-- **Shapes and depth:**
-  - Corner radius: 12px for cards, 20px for sheets, full round for pills.
-  - Shadows are soft and large: `0 8px 30px rgba(0,0,0,.08)`.
-  - Sheets and the player use `backdrop-filter: blur(20px)` over a translucent background.
+- **System font:** use `-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif` for buttons and labels only.
+- **Accent:** amber `#E9A93B` in light themes and `#F2C14E` in dark themes. It's used only for the play button, highlights and toggles.
+- **Surfaces:**
+  - Sheets and the player use translucent backgrounds with `backdrop-filter: blur(20px) saturate(1.4)`.
+  - One soft shadow: `0 8px 30px rgba(0,0,0,.08)`.
+- **Shapes:** corner radius 14px for sheets on the inner edge and full round for pills and the play button.
+- **Icons:** line icons with a 1.75px stroke and round caps, drawn as inline SVG or copied from Lucide (ISC license). They should feel like SF Symbols.
 - **Tap targets:** at least 44×44px.
-- **Icons:** simple line icons with a 1.75px stroke and round caps. Draw them inline as SVG, or copy the few you need from Lucide (free, ISC license).
-- **Motion:** 200–250ms ease-out. Turn animations off under `prefers-reduced-motion`.
-- **Layout:** use `viewport-fit=cover` and `env(safe-area-inset-*)` so nothing hides under the iPhone notch or home bar.
-- **Restraint:** no emojis in the interface. White space is the design.
-
-### Reading fonts
-
-Self-host the reading fonts as `.woff2` in `/fonts` so they work offline. Download them with npm from Fontsource, then copy the files over:
-- `@fontsource/lexend` is the default.
-- `@fontsource/atkinson-hyperlegible`
-- `@fontsource/opendyslexic` (OFL-1.1 license)
-
-Check each package name before installing. **System** uses the device font.
-
-Use `font-display: swap`, and load each font only when the user selects it, except the default.
+- **Safe areas:** use `viewport-fit=cover` and `env(safe-area-inset-*)` throughout.
+- **Restraint:** no gradients except the icon. No borders where spacing can do the job.
 
 ---
 
-## 6. Read-aloud engine (`speech.js`)
+## 6. Voice: make it sound good
 
-Use the browser's built-in `speechSynthesis`. It's free, works offline and needs no key.
+### Default voice: the Natural voice (Engine 2)
 
-**Splitting text (`text.js`)**
-1. Split the text into paragraphs (on blank lines), then sentences, then words.
-2. Use `Intl.Segmenter` (granularity `sentence` and `word`), with a regex fallback.
-3. Split any sentence over about 220 characters at commas or semicolons, because long utterances can stall in some browsers.
-4. Render each sentence as `<span class="s" data-i>` and each word as `<span class="w" data-start data-end>`. The data attributes hold character offsets within the sentence.
+The user's priority is whatever sounds best, so the Natural voice is the default.
 
-**Speaking**
-- Speak **one utterance per sentence**. When one ends, start the next. This keeps the sentence highlight reliable in every browser.
-- **Word highlight:** listen for `boundary` events where `name === "word"`, and use `charIndex` to find the matching word span.
-  - If no word boundary has arrived about 1.2 seconds into a sentence, use sentence-only highlighting for the rest of the session.
-  - Never fake word timing.
-- **Pause:** cancel speech and remember the sentence index, because `pause()` and `resume()` are unreliable on some browsers. Resume restarts that sentence.
-- **Speed:** 0.6× to 1.6×, default 1.0×. Changing the speed while reading restarts the current sentence at the new rate.
-- **Voices:** load them asynchronously and listen for `voiceschanged`.
-  - Show voices that match the document's language, sorted with "Enhanced", "Premium" or "Natural" voices first.
-  - Remember the user's choice.
-- **iOS:** the first `speak()` must happen directly inside a tap handler.
-  - If nothing plays after about 1 second, show the hint "No sound? Check the volume and the silent switch."
-- **Screen and scrolling:**
-  - Keep the screen awake while reading, using the Screen Wake Lock API where supported, and release it when reading stops.
-  - Auto-scroll so the current sentence stays in the middle third of the screen, with smooth scrolling unless reduced motion is on.
-  - If the user scrolls manually while reading, stop auto-scrolling until they press a "Back to reading" chip.
+- **First press of play:**
+  - Start speaking right away with the best device voice (Engine 1).
+  - At the same moment, start downloading the Natural voice in the background. Show a thin progress ring around the play button, and no popup.
+  - When the download finishes, switch to the Natural voice at the next sentence.
+- After that, always use the Natural voice. It's cached and works offline.
+- **Fall back** to the best device voice only if:
+  - the model can't load,
+  - the device is too slow (rule below), or
+  - the user picks a device voice in the voice list.
 
-### Reading ruler
+### Text splitting (`text.js`)
 
-When the ruler is on, keep a band about 2.2 lines tall at full strength and dim the text above and below it to 35% opacity.
-- **While reading aloud:** the band follows the current sentence.
-- **Otherwise:** the band follows a tap or drag on touch screens, and the mouse or arrow keys on Mac.
+1. Split the text into paragraphs, then sentences, then words, using `Intl.Segmenter` with a regex fallback.
+2. Split any sentence over about 220 characters at commas.
+3. Render each sentence as `<span class="s" data-i>` and each word as `<span class="w">` with character offsets.
+
+### Engine 1: device voice (instant fallback)
+
+This is used while the Natural voice downloads, if the Natural voice can't run, or if the user picks a device voice.
+
+Use `speechSynthesis` with one utterance per sentence.
+
+**Picking the best voice automatically**
+1. Wait for `voiceschanged` before reading the voice list.
+2. Throw out any voice whose name contains `undefined`. A known Edge bug sometimes returns broken Natural voice entries.
+3. Throw out Apple novelty voices: Albert, Bad News, Bahh, Bells, Boing, Bubbles, Cellos, Good News, Jester, Organ, Superstar, Trinoids, Whisper, Wobble, Zarvox and similar.
+   - Check the open list at github.com/HadrienGardeur/web-speech-recommended-voices. If its license allows, vendor its English JSON and use its quality ratings instead of name-matching.
+4. Score what's left:
+   - Premium names score highest, then Enhanced.
+   - Then Edge's "Online (Natural)" voices (these need internet).
+   - Then Google voices, then anything else.
+   - Prefer en-US, then other en-* voices.
+5. Pick the top score and remember the user's choice if they pick one themselves.
+
+**Reading behavior**
+- **Word highlight:** use boundary events (`name === "word"`, `charIndex`). If no word boundaries arrive in the first sentence, use sentence highlight for the rest of the session. Never fake word timing.
+- **Pause:** cancel speech and remember the sentence; resume restarts that sentence. Don't rely on `pause()`.
+- **Speed change:** restart the current sentence at the new speed.
+- **iOS:** the first `speak()` must happen inside a tap handler. If nothing is heard after about 1 second, show the line "No sound? Check volume and the silent switch."
+
+### Engine 2: Natural voice (the default)
+
+This uses Kokoro through kokoro-js. It's free, the Apache-2.0 model runs 100% in the browser, it sounds close to human, and it sounds the same on every device.
+
+**Loading**
+- Start loading it the first time the user presses play, never when the app opens, so people who never use read-aloud don't download 86 MB.
+- Load it with a dynamic `import()` of a pinned kokoro-js version from jsDelivr's `+esm` build.
+- Model: `onnx-community/Kokoro-82M-v1.0-ONNX`, with `dtype: "q8"` and `device: "wasm"`. This is about 86 MB, downloaded once.
+- Don't use WebGPU with q8; it's reported to sound garbled. Only use WebGPU if switching to fp32, which is far too large for phones, so skip WebGPU for now.
+- **Off the main thread:** run all generation in `kokoro.worker.js` so the interface never freezes.
+
+**Playing**
+- **Voices:** offer two, the highest-graded American female voice and American male voice from the model card's list (check it; `af_heart` is usually the top female voice).
+- **Streaming:** generate sentence by sentence.
+- **Prefetch** the next two sentences while the current one plays.
+- Play through one `AudioContext`, created inside the user's tap so iOS allows sound.
+- **Pause and resume:** use `audioContext.suspend()` and `resume()`.
+- **Speed:** pass `speed` to generate. Changing it throws away the prefetched audio and regenerates from the current sentence.
+- **Highlight:** word-by-word highlighting matters for dyslexic readers, so make a real effort here.
+  - Use word timestamps if the pinned kokoro-js version, or a timestamped Kokoro model variant, provides them.
+  - If neither works, highlight whole sentences, and never fake word timing.
+
+**Offline and fallback**
+- Make sure the model and runtime files are cached (by transformers.js's cache or the service worker) so the Natural voice works in airplane mode after the first download.
+- **Too slow:** if generating a sentence takes longer than playing it twice in a row, switch back to the device voice and show one line: "This device is too slow for the Natural voice."
+- **Load failure:** also fall back to the device voice.
+
+### Voice list (pushed from "Aa" → Voice)
+
+```
+NATURAL VOICE (on this device, works offline)
+  Heart            ✓        ← default; progress ring while downloading
+  Michael
+
+DEVICE VOICES
+  Best available
+  Ava (Premium)
+  Samantha
+  …                         ← only good-quality voices for the user's language
+
+Apple devices: get more voices in Settings → Accessibility →
+Spoken Content → Voices.          ← one muted footer line, Apple devices only
+```
+
+- **Preview:** tapping a voice plays the sample "This is how I sound." Tapping again selects it.
+
+### Shared reading behavior (both engines)
+
+- Keep the screen awake while reading (Screen Wake Lock, where supported).
+- Auto-scroll so the current sentence stays in the middle third of the screen.
+- If the user scrolls manually, pause auto-scroll and show a small "Back to reading" chip.
 
 ---
 
 ## 7. Library (`library.js`)
 
-Store documents in **IndexedDB** with a tiny hand-written helper, not a library. Each document has these fields: `{ id, title, text, createdAt, updatedAt, lastSentence }`.
+Store documents in **IndexedDB** with a tiny hand-written helper. Each document has these fields: `{ id, title, text, createdAt, updatedAt, lastSentence }`.
 
-- **Title:** the first line, or the first six words if there's no line break. Users can rename it.
-- **Resume:** reopening a document scrolls to `lastSentence`.
-- **Row menu:** each row has a "…" menu with Rename and Delete. Delete asks for confirmation.
+- **Title:** the first line, or the first six words if there's no line break.
+- **Resume:** reopening a document jumps to `lastSentence`.
 
 ---
 
-## 8. App icon (Claude Code makes this)
+## 8. Icon
 
-### Step 1: make three concepts
+If the user already picked an icon, keep it. Otherwise make one icon and show it on `icons/preview.html` at 1024, 180, 60 and 32px, on light and dark backgrounds. Revise only if the user asks.
 
-Make **three concepts** as 1024×1024 SVGs and show them together on a preview page called `icons/preview.html`. Show each one at 1024, 180, 60 and 32px, on light and dark backgrounds. Ask the user to pick one.
-
-**A. Highlighted line (recommended)**
-- A cream background with a subtle vertical gradient from `#FBF6EC` to `#F2E8D5`.
-- Three horizontal rounded bars in ink `#2E2A25`, like lines of text. Widths are about 560, 620 and 400 units; the last one is shorter, like a paragraph ending.
-- The bars are left-aligned as a group, and the group is centered.
+**Design:**
+- A cream, full-bleed background with a subtle vertical gradient from `#FBF6EC` to `#F2E8D5`.
+- Three rounded horizontal bars in ink `#2E2A25`, like lines of text. Widths are about 560, 620 and 400 units on a 1024 canvas.
 - The middle bar sits on a soft amber `#F5C451` rounded highlight band.
-- No letters and no other details.
+- Everything stays inside the central 80% circle.
+- No letters, no hairlines. The background is opaque; iOS rounds the corners.
 
-**B. Lowercase "a"**
-- A single lowercase **a** in Lexend Medium, ink on cream.
-- A short amber rounded underline beneath it.
-
-**C. Ruler**
-- The same three lines as A.
-- The top and bottom lines are faded to 30% opacity; the middle line is at full strength. This shows the reading ruler.
-
-### Rules for all three
-
-- Keep all artwork inside the central 80% circle, the "maskable safe zone."
-- The background must be full-bleed and opaque. iOS rounds the corners itself.
-- No text other than concept B's single letter, and no thin hairlines (they vanish at small sizes).
-
-### Step 2: export the chosen icon
-
-Export these files into `/icons`. Use the `sharp` npm package, or as a fallback a tiny `export.html` that draws the SVG to a canvas and downloads the PNGs.
-- `icon.svg` (master)
+**Export:**
+- `icon.svg`
 - `favicon.svg`
 - `favicon-32.png`
-- `apple-touch-icon.png` (180×180)
+- `apple-touch-icon.png` (180)
 - `icon-192.png`
 - `icon-512.png`
-- `icon-maskable-512.png` (artwork scaled to about 80%)
+- `icon-maskable-512.png`
 
-Link them in `index.html` and in `manifest.webmanifest`. The manifest uses `name: "EasyRead"`, `display: "standalone"`, and `background_color` and `theme_color` set to `#FBF5E9`.
+Use `sharp`, or a canvas-based `export.html` as a fallback.
+
+**Manifest:** `name: "EasyRead"`, `display: "standalone"`, with `background_color` and `theme_color` set to `#FBF5E9`.
 
 ---
 
-## 9. Build phases
+## 9. Anyone with the link
 
-Check off each phase's **Done when** items before moving on.
+The app is shared by link. Anyone who taps it, on any phone or computer, must get the whole app for free, with no account and no setup. Apply these rules from Phase 0 on.
+
+### Hosting (free)
+- Use GitHub Pages from a public repo named `easyread`, which gives the address `https://<username>.github.io/easyread/`.
+- The free plan allows a site of up to 1 GB and about 100 GB of bandwidth a month.
+- Keep the site itself (code, fonts and icons) under about 5 MB so it opens fast on cellular data.
+- Never commit the Natural voice model to the repo.
+  - Load it from Hugging Face, pinned to a revision, so its 86 MB downloads don't count against GitHub's bandwidth.
+  - Load kokoro-js from jsDelivr, pinned to a version.
+  - Both are free and need no keys.
+  - If either is unreachable, the device voice takes over and the rest of the app still works.
+
+### Paths (the #1 way sites break on GitHub Pages)
+- The site lives in a subfolder (`/easyread/`), so every path must be relative: `./styles.css`, `./icons/…`, never `/styles.css`.
+- The manifest's `start_url` and `scope` are both `"./"`. Register the service worker as `./sw.js`.
+- All file and folder names must be lowercase. Windows ignores capital letters but GitHub Pages doesn't, so `Fonts/OpenDyslexic.woff2` works on the PC and breaks online.
+- Add a `404.html` that sends people to `./`.
+
+### No custom headers
+GitHub Pages can't set custom headers, so multi-threaded WebAssembly isn't available.
+- Run Kokoro single-threaded. In transformers.js that's `env.backends.onnx.wasm.numThreads = 1`; check the current setting name for the pinned version.
+- Don't add coi-serviceworker or similar hacks. They conflict with our own service worker.
+
+### Updates reach everyone
+- Service worker caching:
+  - `index.html` is network-first.
+  - Everything else is cache-first, versioned by one `VERSION` constant that gets bumped on every release.
+  - Delete old caches on activate.
+- A new version applies the next time someone opens the app, with no "update available" popup.
+
+### Every visitor gets their own private app
+- Each person's library lives only in their own browser. Nobody sees anyone else's text, including the person who shared the link.
+- Every new visitor starts with the Welcome document.
+
+### Link preview
+When the link is texted or posted, it should show a clean preview.
+- Add Open Graph and Twitter card tags:
+  - title: "EasyRead"
+  - description: "Makes reading more comfortable. Free, private, works offline."
+- Add a 1200×630 `og-image.png` showing the icon and the name on cream.
+- `og:image` must be the full `https://` address.
+
+### Browsers people will actually use
+- Main browsers: Safari on iPhone, iPad and Mac, Chrome on Android, Edge and Chrome on Windows, and Firefox.
+- In-app browsers (Instagram, TikTok, Snapchat, Messenger) can block read-aloud or offline mode.
+  - If `speechSynthesis` is missing or an in-app browser is detected, show one quiet line under the play button: "For read-aloud, open in Safari or Chrome." Add a Copy link button.
+  - Reading still works there.
+
+---
+
+## 10. Build phases
+
+Check off **Done when** before moving on.
 
 ### Phase 0: setup
-1. Check for Node and Git.
-2. Create the folder structure and README.
-3. Run `git init`.
-4. Start a local server with `npx serve .` and show the user how to open it.
+1. Check `node -v` and `git --version`.
+2. Create the folders and run `git init`.
+3. Start a local server with `npx serve .`.
 
-**Done when:** a blank page titled EasyRead opens at the local address.
+**Done when:** a blank EasyRead page opens locally.
 
 ### Phase 1: reader core
-1. Build the Home screen: text box, Paste, Open `.txt`, Read it.
-2. Build the Reader screen with Paper theme defaults and the Lexend font.
-3. Add text splitting, the sample document and the Back button.
+1. Build the Library and the New sheet.
+2. Build the Reader in OpenDyslexic with the Paper theme.
+3. Add text splitting and the Welcome document.
 
-**Done when:** pasted text shows in the calm reading layout, and long text stays left-aligned at about 62 characters per line.
+**Done when:** pasted text appears in the dyslexia font in a calm column.
 
-### Phase 1.5: put it online early
-1. Walk the user through a free GitHub account and a **public** repo.
-2. Push the project.
-3. Turn on GitHub Pages and give them the `https://…github.io/…` link to open on their phone.
+### Phase 1.5: online early
+1. Set up a free GitHub account and a public repo named `easyread`.
+2. Push the project and turn on GitHub Pages.
+3. Give the user the HTTPS link to open on their phone.
 
-Netlify Drop is a free backup option.
+**Done when:** it opens on the user's phone with fonts, styles and icons all loading, which proves the paths are relative and lowercase.
 
-**Done when:** the app opens on the user's phone from that link.
+### Phase 2: "Aa" sheet
+1. Add text size, the four themes plus the first-launch auto theme, font, spacing and line focus.
+2. Save everything.
+3. Make the contrast self-test pass.
 
-### Phase 2: Look sheet
-1. Add all themes, Auto mode and custom tint with contrast checking.
-2. Add the fonts, size, spacing presets and custom sliders, and line width.
-3. Add the reading ruler and Focus mode.
-4. Save settings to localStorage.
+**Done when:** every option previews live and survives a reload.
 
-**Done when:**
-- Every option updates live.
-- Settings survive a reload.
-- The contrast self-test passes.
+### Phase 3: device voice
+1. Add best-voice selection, the play button and player pill, tap a sentence or word, speed, highlight, wake lock and auto-scroll.
 
-### Phase 3: read aloud
-1. Build everything in section 6: the player pill, tap a sentence, tap a word, speed and voice.
-2. Add wake lock, auto-scroll and the "Back to reading" chip.
+**Done when:** read-aloud works on iPhone Safari and on Windows Edge or Chrome, and no novelty or broken voice can be picked.
 
-**Done when:**
-- Reading works on iPhone Safari and on Chrome or Edge on Windows.
-- Sentence highlight always works.
-- Word highlight works wherever the browser supports it.
-
-### Phase 4: library
-1. Add IndexedDB saving and the Recent list.
-2. Add rename, delete and resume position.
-3. On wide screens, show the library as a sidebar.
-
-**Done when:** documents are still there after closing and reopening the browser.
-
-### Phase 5: app-ify and icon
-1. Make the three icon concepts, the user picks one, then export the files (section 8).
-2. Add the manifest and a service worker that caches the app shell and fonts.
-3. Make sure the app works offline after the first visit.
-4. Add safe-area padding and the Mac keyboard shortcuts.
+### Phase 4: Natural voice (becomes the default)
+1. Run Kokoro in a worker, with the download and progress ring, prefetching, pause, speed and both fallbacks.
+2. Add the voice list.
+3. Make the Natural voice the default, following the rule at the top of section 6.
 
 **Done when:**
-- "Add to Home Screen" on iPhone shows the icon and opens full-screen.
-- Airplane mode still works after the first visit.
+- The first press of play speaks instantly with the device voice, then switches to the Natural voice once it has downloaded.
+- The Natural voice plays without gaps on the user's PC.
+- It's tested on their iPhone.
+- It works in airplane mode after downloading.
 
-### Phase 6: polish and test
-1. Run the test checklist below on every device available.
-2. Fix anything that looks cramped, misaligned or janky.
-3. Write the README: what the app does, who it helps, privacy, how to run it, and credits and licenses for the fonts and icons.
+### Phase 5: library
+1. Add IndexedDB, swipe to delete with Undo, rename and resume.
+2. On wide screens, show the library as a sidebar.
 
-### Stretch goals (only if Phases 0–6 are done)
-- **Scan a page:** `<input type="file" accept="image/*" capture="environment">`, then run OCR in the browser with **Tesseract.js** (free).
-  - Show progress, and let the user fix the recognized text before reading.
-  - The language data downloads on first use, so say that.
-- **PDF import:** with **pdf.js** (free).
-- **Spanish:** Spanish interface text, with Spanish voices chosen automatically when the document language is Spanish.
-- **Definitions:** tap a word, then "Define." Fetch the meaning from the free Dictionary API (dictionaryapi.dev), and show "Needs internet" when offline.
+**Done when:** documents survive closing the browser.
+
+### Phase 6: app-ify and icon
+1. Make the icon and export the files.
+2. Add the manifest and service worker (app shell and fonts cached), safe areas and keyboard shortcuts.
+
+**Done when:** "Add to Home Screen" shows the icon, opens full-screen and works offline.
+
+### Phase 7: polish and test
+1. Go screen by screen and remove anything that isn't in this file.
+2. Fix spacing and alignment until it looks like an Apple app.
+3. Run the checklist below.
+4. Write the README: what the app does, who it helps, privacy, how to run it, and credits and licenses for OpenDyslexic, Atkinson Hyperlegible, Kokoro and Lucide.
 
 ---
 
-## 10. Test checklist
+## 11. Test checklist
 
+- [ ] **Fresh phone test:** on a friend's phone that has never visited, over cellular data, the app opens, reads aloud and downloads the Natural voice.
+- [ ] **Android Chrome:** reading, device voice, and the Natural voice (or its fallback).
+- [ ] **In-app browser:** open the link from Instagram or Snapchat. Reading works, and the "open in Safari or Chrome" line appears if read-aloud is blocked.
+- [ ] **Link preview:** text the link in iMessage. The preview shows the image and the title.
+- [ ] **Updates:** push a small change. A phone that already installed the app gets it the next time it opens.
 - [ ] **iPhone Safari:**
-  - [ ] paste, read aloud, pause and resume, change speed mid-sentence
-  - [ ] silent-switch hint
-  - [ ] Add to Home Screen
-  - [ ] airplane mode
-- [ ] **iPad Safari:** sidebar layout, the Look popover, rotation.
+  - [ ] paste, device voice, Natural voice download and playback
+  - [ ] pause and resume, speed change mid-sentence
+  - [ ] Add to Home Screen, airplane mode
+- [ ] **iPad Safari:** sidebar, the Aa popover, rotation.
 - [ ] **Mac Safari:** keyboard shortcuts, Add to Dock.
-- [ ] **Windows Chrome or Edge:** read aloud, voices load, install prompt.
-- [ ] **Every theme:**
-  - [ ] the contrast self-test passes
-  - [ ] the highlight is visible but text stays readable
-- [ ] **VoiceOver:** every button has a label, and focus order makes sense.
-- [ ] **Accessibility settings:** reduced motion turns off animations, and 200% browser zoom still works with no sideways scrolling.
-- [ ] **A 5,000-word paste:** scrolling stays smooth and reading doesn't stall.
-- [ ] **No network requests at all** after the first load, except optional stretch features.
+- [ ] **Windows Edge and Chrome:**
+  - [ ] Natural voices from Edge appear in Device voices
+  - [ ] broken "undefined" voices are filtered out
+- [ ] **Every theme:** contrast test passes, and the highlight is visible but the text stays readable.
+- [ ] **VoiceOver:** all buttons are labeled, and focus order makes sense.
+- [ ] **Accessibility settings:** reduced motion turns off animations, and 200% zoom has no sideways scrolling.
+- [ ] **A 5,000-word paste:** smooth scrolling, and no stalls with either voice.
+- [ ] **Nothing on screen that isn't described in this file.**

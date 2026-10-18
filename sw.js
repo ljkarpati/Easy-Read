@@ -1,11 +1,9 @@
 // sw.js: service worker for offline use.
-// Serves the app from the cache first, so it opens in airplane mode
-// and makes no network requests after the first visit.
-// Bump VERSION whenever any app file changes, or devices keep the old copy.
-// The big text-reader and PDF files in /vendor are not listed: they are
-// cached the first time someone scans a page or opens a PDF.
+// The page itself (index.html) is network-first, so a new version shows
+// up the next time someone opens the app. Everything else is cache-first.
+// Bump VERSION on every release, or devices keep the old files.
 
-const VERSION = "easyread-v5";
+const VERSION = "easyread-v6";
 
 const SHELL = [
   "./",
@@ -15,17 +13,15 @@ const SHELL = [
   "./js/app.js",
   "./js/text.js",
   "./js/reader.js",
-  "./js/speech.js",
+  "./js/voice-device.js",
   "./js/settings.js",
   "./js/library.js",
-  "./js/contrast.js",
-  "./js/import.js",
-  "./js/lookup.js",
-  "./fonts/lexend-latin-400-normal.woff2",
-  "./fonts/lexend-latin-ext-400-normal.woff2",
-  "./fonts/atkinson-hyperlegible-latin-400-normal.woff2",
-  "./fonts/atkinson-hyperlegible-latin-ext-400-normal.woff2",
   "./fonts/opendyslexic-latin-400-normal.woff2",
+  "./fonts/opendyslexic-latin-700-normal.woff2",
+  "./fonts/atkinson-hyperlegible-latin-400-normal.woff2",
+  "./fonts/atkinson-hyperlegible-latin-700-normal.woff2",
+  "./fonts/atkinson-hyperlegible-latin-ext-400-normal.woff2",
+  "./fonts/atkinson-hyperlegible-latin-ext-700-normal.woff2",
   "./icons/favicon.svg",
   "./icons/favicon-32.png",
   "./icons/apple-touch-icon.png",
@@ -56,9 +52,15 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      caches.match("./", { ignoreSearch: true })
-        .then((hit) => hit || caches.match("./index.html"))
-        .then((hit) => hit || fetch(request)),
+      fetch(request, { cache: "no-store" })
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(VERSION).then((cache) => cache.put("./", copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match("./").then((hit) => hit || caches.match("./index.html"))),
     );
     return;
   }
