@@ -12,7 +12,7 @@ Your text stays on this device. There are no accounts, no tracking and no server
 
 ## Status
 
-Being rebuilt to the v3 guide in `CLAUDE.md`, one phase at a time. Phase 1 (Library, New sheet and Reader) is done.
+Being rebuilt to the v3 guide in `CLAUDE.md`, one phase at a time. Phases 1 and 2 (Library, New sheet, Reader and the Aa sheet) are done.
 
 ## Run it on your computer
 

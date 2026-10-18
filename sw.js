@@ -3,7 +3,7 @@
 // up the next time someone opens the app. Everything else is cache-first.
 // Bump VERSION on every release, or devices keep the old files.
 
-const VERSION = "easyread-v6";
+const VERSION = "easyread-v7";
 
 const SHELL = [
   "./",

@@ -70,6 +70,7 @@ function openSheet(sheet, opener) {
   sheet.getBoundingClientRect(); // start the slide from the closed position
   sheet.classList.add("open");
   if (sheet === lookSheet) {
+    showLookPage("main", false);
     syncLook();
     $("#aa-btn").setAttribute("aria-expanded", "true");
     sheet.focus({ preventScroll: true });
@@ -137,7 +138,6 @@ function enableSheetDrag(sheet) {
 
 lookSheet.tabIndex = -1;
 enableSheetDrag(lookSheet);
-lookSheet.querySelector("[data-close]").addEventListener("click", () => closeSheet());
 $("#backdrop").addEventListener("click", () => closeSheet());
 
 /* ---------- Library ---------- */
@@ -463,7 +463,7 @@ const speaker = new Speaker({
     const s = settings.get();
     const next = pickVoice(speaker.lang, s.voices[speaker.lang], false);
     speaker.setVoice(next);
-    syncVoiceSelect();
+    syncVoices();
     toast(`“${bad.name}” didn’t play here, so EasyRead switched to ${next ? `“${next.name}”` : "the device voice"}.`, 6000);
   },
 });
@@ -520,42 +520,58 @@ document.addEventListener("visibilitychange", () => {
 function updateVoice() {
   const s = settings.get();
   speaker.setVoice(pickVoice(speaker.lang, s.voices[speaker.lang], false));
-  syncVoiceSelect();
+  syncVoices();
 }
 
-function syncVoiceSelect() {
-  const select = $("#voice-select");
-  select.replaceChildren();
-  if (!speechSupported) {
-    select.add(new Option("Not available in this browser", ""));
-    select.disabled = true;
-    return;
-  }
-  select.disabled = false;
-  for (const v of voicesFor(speaker.lang, false)) {
-    select.add(new Option(v.name + (isBroken(v) ? " – didn’t play here" : ""), v.voiceURI));
-  }
-  select.add(new Option("Device default voice", DEVICE_DEFAULT));
-  select.value = speaker.voice?.voiceURI || DEVICE_DEFAULT;
+// "Best available" is stored as an empty choice: EasyRead picks for you.
+function chosenVoiceURI() {
+  return settings.get().voices[speaker.lang] || "";
 }
 
-// Choosing a voice plays a short sample.
-$("#voice-select").addEventListener("change", (e) => {
-  const uri = e.target.value;
-  forgiveVoice(voicesFor(speaker.lang, true).find((v) => v.voiceURI === uri));
+function syncVoices() {
+  const chosen = chosenVoiceURI();
+  const current = speaker.voice;
+  $("#voice-name").textContent = !speechSupported ? "Not available" : chosen && current ? current.name : "Best available";
+
+  const list = $("#voice-list");
+  const rows = [{ uri: "", name: "Best available", note: !chosen && current ? current.name : "" }];
+  for (const v of voicesFor(speaker.lang, false)) rows.push({ uri: v.voiceURI, name: v.name, note: isBroken(v) ? "Didn’t play here" : "" });
+  list.replaceChildren(...rows.map((r) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(r.uri === chosen));
+    b.dataset.uri = r.uri;
+    const text = document.createElement("span");
+    text.textContent = r.name;
+    if (r.note) {
+      const note = document.createElement("span");
+      note.className = "voice-note";
+      note.textContent = ` · ${r.note}`;
+      text.append(note);
+    }
+    b.append(text);
+    b.insertAdjacentHTML("beforeend", '<svg class="icon"><use href="#i-check"/></svg>');
+    li.append(b);
+    return li;
+  }));
+  $("#voice-foot").hidden = !(isIOS || isMac);
+}
+
+// Choosing a voice selects it and plays a short sample.
+$("#voice-list").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-uri]");
+  if (!b) return;
+  const uri = b.dataset.uri;
+  if (uri) forgiveVoice(voicesFor(speaker.lang, true).find((v) => v.voiceURI === uri));
   settings.set({ voices: { ...settings.get().voices, [speaker.lang]: uri } });
   speaker.sample("This is how I sound.");
 });
 
 onVoicesChanged(updateVoice);
 
-/* ---------- "Text and voice" sheet ---------- */
-
-function setPct(range) {
-  const min = +range.min;
-  const max = +range.max;
-  range.style.setProperty("--pct", ((range.value - min) / (max - min)) * 100 + "%");
-}
+/* ---------- "Aa" sheet ---------- */
 
 // Settings that move text around: keep the reader's place.
 function setLayout(patch) {
@@ -566,21 +582,37 @@ function setLayout(patch) {
   if ("font" in patch && document.fonts?.ready) document.fonts.ready.then(() => reader.restoreAnchor(anchor));
 }
 
+function changeSize(step) {
+  const size = Math.max(settings.SIZE_MIN, Math.min(settings.SIZE_MAX, settings.effectiveSize() + step * settings.SIZE_STEP));
+  setLayout({ size });
+}
+
+function showLookPage(name, moveFocus = true) {
+  $("#look-main").hidden = name !== "main";
+  $("#look-voices").hidden = name !== "voices";
+  if (name === "voices") syncVoices();
+  if (moveFocus) $(name === "voices" ? "#voices-back" : "#voice-row").focus({ preventScroll: true });
+}
+
 function syncLook() {
   const s = settings.get();
-  for (const b of $$("[data-theme-choice]")) b.setAttribute("aria-pressed", String(b.dataset.themeChoice === s.theme));
+  const theme = settings.resolvedTheme();
+  for (const b of $$("[data-theme-choice]")) b.setAttribute("aria-pressed", String(b.dataset.themeChoice === theme));
   for (const seg of $$(".seg[data-setting]")) {
     const value = s[seg.dataset.setting];
     for (const b of seg.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.value === value));
   }
   const size = settings.effectiveSize();
-  $("#size-range").value = size;
-  $("#size-value").textContent = `${size} px`;
-  setPct($("#size-range"));
+  $("#size-down").disabled = size <= settings.SIZE_MIN;
+  $("#size-up").disabled = size >= settings.SIZE_MAX;
   $("#ruler-switch").setAttribute("aria-checked", String(s.ruler));
-  syncVoiceSelect();
+  syncVoices();
 }
 
+$("#size-down").addEventListener("click", () => changeSize(-1));
+$("#size-up").addEventListener("click", () => changeSize(1));
+
+// Tapping a swatch stops following the device's light or dark mode.
 $("#theme-swatches").addEventListener("click", (e) => {
   const choice = e.target.closest("[data-theme-choice]")?.dataset.themeChoice;
   if (choice) settings.set({ theme: choice });
@@ -593,8 +625,9 @@ for (const seg of $$(".seg[data-setting]")) {
   });
 }
 
-$("#size-range").addEventListener("input", (e) => setLayout({ size: +e.target.value }));
 $("#ruler-switch").addEventListener("click", () => settings.set({ ruler: !settings.get().ruler }));
+$("#voice-row").addEventListener("click", () => showLookPage("voices"));
+$("#voices-back").addEventListener("click", () => showLookPage("main"));
 
 settings.onChange((s, patch) => {
   if ("rate" in patch) {
@@ -611,7 +644,8 @@ settings.onChange((s, patch) => {
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
-    if (openSheetEl) closeSheet();
+    if (openSheetEl === lookSheet && !$("#look-voices").hidden) showLookPage("main");
+    else if (openSheetEl) closeSheet();
     return;
   }
   if (e.key === "Tab" && openSheetEl) {

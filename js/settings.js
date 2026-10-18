@@ -3,7 +3,7 @@
 const KEY = "easyread.settings";
 
 export const DEFAULTS = Object.freeze({
-  theme: "auto",       // auto (follows the device until a swatch is tapped) | paper | sky | dusk | night
+  theme: "auto",       // auto (follows the device until a swatch is tapped) | paper | sky | dark | night
   font: "dyslexic",    // dyslexic (OpenDyslexic) | standard (Atkinson Hyperlegible)
   size: null,          // null = 19px on phone, 21px on iPad and Mac
   spacing: "normal",   // normal | wide
@@ -36,7 +36,8 @@ function migrate(saved) {
   const s = { ...DEFAULTS, ...saved, voices: { ...(saved.voices || {}) } };
   if (!FONTS[s.font]) s.font = s.font === "atkinson" ? "standard" : "dyslexic";
   if (!SPACING[s.spacing]) s.spacing = s.spacing === "wide" || s.spacing === "extra" ? "wide" : "normal";
-  if (!["auto", "paper", "sky", "dusk", "night"].includes(s.theme)) s.theme = "paper";
+  if (s.theme === "dusk") s.theme = "dark";
+  if (!["auto", "paper", "sky", "dark", "night"].includes(s.theme)) s.theme = "paper";
   for (const old of ["customBg", "customVars", "width", "letter", "lineHeight", "dyslexiaMode", "beforeDyslexia", "onlineVoices"]) delete s[old];
   return s;
 }
@@ -76,7 +77,7 @@ export function onChange(fn) {
 }
 
 export function resolvedTheme() {
-  if (state.theme === "auto") return darkQuery.matches ? "dusk" : "paper";
+  if (state.theme === "auto") return darkQuery.matches ? "dark" : "paper";
   return state.theme;
 }
 

@@ -68,6 +68,7 @@ export function selfTest() {
       "text on background": contrast(text, bg),
       "text on sentence highlight": contrast(text, sentenceBg),
       "text on word highlight": contrast(get("--word-text"), wordBg),
+      "muted text on background": contrast(get("--muted"), bg),
     };
     for (const [pair, ratio] of Object.entries(pairs)) {
       const ok = ratio >= TARGET;

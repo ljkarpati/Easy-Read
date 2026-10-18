@@ -259,7 +259,7 @@ export class Reader {
     if (!this.rulerOn) return;
     const height = this.reader.clientHeight;
     const lh = this._lineHeight();
-    const band = 2.2 * lh;
+    const band = 2 * lh; // about two lines at full strength
     const base = this.reader.getBoundingClientRect().top;
     let top;
     let bottom;

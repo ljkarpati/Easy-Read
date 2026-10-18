@@ -34,8 +34,10 @@
       var s = {};
       try { s = JSON.parse(localStorage.getItem("easyread.settings") || "{}") || {}; } catch (e) {}
       var t = s.theme;
-      if (["paper", "sky", "dusk", "night"].indexOf(t) < 0) {
-        t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dusk" : "paper";
+      if (t === "dusk") t = "dark"; // older name
+      if (["paper", "sky", "dark", "night"].indexOf(t) < 0) {
+        // First launch: follow the device until a swatch is tapped.
+        t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "paper";
       }
       document.documentElement.setAttribute("data-theme", t);
     })();
@@ -46,6 +48,8 @@
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <!-- Icons from Lucide (ISC license, lucide.dev) -->
     <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
     <symbol id="i-paste" viewBox="0 0 24 24"><path d="M11 14h10"/><path d="M16 4h2a2 2 0 0 1 2 2v1.344"/><path d="m17 18 4-4-4-4"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"/><rect x="8" y="2" width="8" height="4" rx="1"/></symbol>
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
@@ -121,63 +125,59 @@
     </div>
   </section>
 
-  <section class="sheet look-sheet" id="look-sheet" role="dialog" aria-modal="true" aria-labelledby="look-title" hidden>
+  <section class="sheet look-sheet" id="look-sheet" role="dialog" aria-modal="true" aria-label="Text and voice" hidden>
     <div class="sheet-grab"><div class="sheet-grabber"></div></div>
-    <header class="sheet-head">
-      <h2 id="look-title">Text and voice</h2>
-      <button class="bar-btn strong" type="button" data-close>Done</button>
-    </header>
-    <div class="sheet-body">
-      <div class="look-row">
-        <span class="row-label" id="theme-label">Theme</span>
-        <div class="swatches" role="group" aria-labelledby="theme-label" id="theme-swatches">
-          <button class="swatch-btn" type="button" data-theme-choice="auto" aria-pressed="false"><span class="swatch auto"></span><span class="swatch-label">Auto</span></button>
-          <button class="swatch-btn" type="button" data-theme-choice="paper" aria-pressed="false"><span class="swatch" style="background:#FBF5E9;color:#2B2620">Aa</span><span class="swatch-label">Paper</span></button>
-          <button class="swatch-btn" type="button" data-theme-choice="sky" aria-pressed="false"><span class="swatch" style="background:#EAF2F8;color:#1E2A35">Aa</span><span class="swatch-label">Sky</span></button>
-          <button class="swatch-btn" type="button" data-theme-choice="dusk" aria-pressed="false"><span class="swatch" style="background:#1F2023;color:#E6E2DA">Aa</span><span class="swatch-label">Dark</span></button>
-          <button class="swatch-btn" type="button" data-theme-choice="night" aria-pressed="false"><span class="swatch" style="background:#17140F;color:#D9CBB3">Aa</span><span class="swatch-label">Night</span></button>
-        </div>
+
+    <div class="look-page" id="look-main">
+      <div class="size-row" role="group" aria-label="Text size">
+        <button class="size-btn small" type="button" id="size-down" aria-label="Smaller text">A</button>
+        <button class="size-btn large" type="button" id="size-up" aria-label="Bigger text">A</button>
       </div>
 
-      <div class="look-row">
-        <span class="row-label" id="font-label">Font</span>
+      <div class="swatches" role="group" aria-label="Theme" id="theme-swatches">
+        <button class="swatch" type="button" data-theme-choice="paper" aria-label="Paper" aria-pressed="false" style="--sw-bg:#FBF5E9;--sw-text:#2B2620">Aa</button>
+        <button class="swatch" type="button" data-theme-choice="sky" aria-label="Sky" aria-pressed="false" style="--sw-bg:#EAF2F8;--sw-text:#1E2A35">Aa</button>
+        <button class="swatch" type="button" data-theme-choice="dark" aria-label="Dark" aria-pressed="false" style="--sw-bg:#1C1C1E;--sw-text:#E5E5E7">Aa</button>
+        <button class="swatch" type="button" data-theme-choice="night" aria-label="Night" aria-pressed="false" style="--sw-bg:#17140F;--sw-text:#D9CBB3">Aa</button>
+      </div>
+
+      <div class="look-line">
+        <span class="look-label" id="font-label">Font</span>
         <div class="seg" role="group" aria-labelledby="font-label" data-setting="font">
-          <button type="button" data-value="dyslexic" aria-pressed="false">Dyslexic</button>
-          <button type="button" data-value="standard" aria-pressed="false">Standard</button>
+          <button type="button" data-value="dyslexic" class="font-dyslexic" aria-pressed="false">Dyslexic</button>
+          <button type="button" data-value="standard" class="font-standard" aria-pressed="false">Standard</button>
         </div>
       </div>
 
-      <div class="look-row">
-        <div class="row-head"><label class="row-label" for="size-range">Size</label><span class="row-value" id="size-value"></span></div>
-        <div class="slider-row">
-          <span class="a-small" aria-hidden="true">A</span>
-          <input type="range" id="size-range" min="15" max="33" step="2">
-          <span class="a-large" aria-hidden="true">A</span>
-        </div>
-      </div>
-
-      <div class="look-row">
-        <span class="row-label" id="spacing-label">Spacing</span>
+      <div class="look-line">
+        <span class="look-label" id="spacing-label">Spacing</span>
         <div class="seg" role="group" aria-labelledby="spacing-label" data-setting="spacing">
           <button type="button" data-value="normal" aria-pressed="false">Normal</button>
           <button type="button" data-value="wide" aria-pressed="false">Wide</button>
         </div>
       </div>
 
-      <div class="look-row">
-        <button class="switch-row" type="button" role="switch" id="ruler-switch" aria-checked="false">
-          <span class="switch-text"><span class="switch-title">Line focus</span></span>
-          <span class="switch" aria-hidden="true"></span>
-        </button>
-      </div>
+      <button class="look-line switch-row" type="button" role="switch" id="ruler-switch" aria-checked="false">
+        <span class="look-label">Line focus</span>
+        <span class="switch" aria-hidden="true"></span>
+      </button>
 
-      <div class="look-row">
-        <label class="row-label" for="voice-select">Voice</label>
-        <span class="select-wrap">
-          <select id="voice-select"></select>
-          <svg class="icon"><use href="#i-chevron-left"/></svg>
-        </span>
-      </div>
+      <button class="look-line nav-row" type="button" id="voice-row">
+        <span class="look-label">Voice</span>
+        <span class="nav-value" id="voice-name"></span>
+        <svg class="icon chevron"><use href="#i-chevron-right"/></svg>
+      </button>
+    </div>
+
+    <div class="look-page" id="look-voices" hidden>
+      <header class="page-head">
+        <button class="icon-btn" type="button" id="voices-back" aria-label="Back"><svg class="icon"><use href="#i-chevron-left"/></svg></button>
+        <h2 id="voices-title">Voice</h2>
+        <span aria-hidden="true"></span>
+      </header>
+      <p class="list-label" id="device-voices-label">Device voices</p>
+      <ul class="voice-list" id="voice-list" role="radiogroup" aria-labelledby="device-voices-label"></ul>
+      <p class="list-foot" id="voice-foot" hidden>Apple devices: get more voices in Settings → Accessibility → Spoken Content → Voices.</p>
     </div>
   </section>
 
