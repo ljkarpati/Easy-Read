@@ -8,17 +8,12 @@ export const supported = !!(synth && window.SpeechSynthesisUtterance);
 export const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isSafari = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
 
-// Sound-effect voices that Apple lists alongside real ones.
-const EFFECT_VOICES = /^(Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Good News|Jester|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox)\b/i;
-// Older robotic voices: kept, but listed last.
-const ROBOTIC = /^(Eddy|Flo|Grandma|Grandpa|Reed|Rocko|Sandy|Shelley|Fred|Junior|Kathy|Ralph)\b/i;
-const QUALITY = /premium|enhanced|natural|neural/i;
-
 /* ---------- Voices ---------- */
 
 let voices = [];
 let voicesKey = "";
 const voiceListeners = new Set();
+const notify = () => voiceListeners.forEach((fn) => fn());
 
 // Safari hands back new voice objects on every call, so compare the
 // list by name, not by object, or the reader restarts for no reason.
@@ -28,9 +23,136 @@ function refreshVoices() {
   if (key === voicesKey) return;
   voices = next;
   voicesKey = key;
-  voiceListeners.forEach((fn) => fn());
+  if (next.length) forgetBrokenIfVoicesChanged(key);
+  notify();
 }
 
+export function onVoicesChanged(fn) {
+  voiceListeners.add(fn);
+  return () => voiceListeners.delete(fn);
+}
+
+/* ---------- Voice quality ---------- */
+
+// Quality ratings come from Readium's open voice list (voices/en.json,
+// BSD 3-Clause, see voices/license.txt). For other languages, or before
+// the list has loaded, EasyRead goes by the name: Premium, then Enhanced.
+const RANK = { veryHigh: 5, high: 4, normal: 3, low: 2, veryLow: 0 };
+let ratedByName = new Map();   // exact name (or alternative name) -> rank
+let appleRanks = new Map();    // Apple base name ("Ava") -> ranks, lowest first
+let novelty = new Set(["Albert", "Bad News", "Bahh", "Bells", "Boing", "Bubbles", "Cellos", "Good News", "Jester", "Organ", "Superstar", "Trinoids", "Whisper", "Wobble", "Zarvox", "Pipe Organ", "Deranged", "Hysterical", "Princess"]);
+let veryLow = new Set(["Eddy", "Flo", "Grandma", "Grandpa", "Reed", "Rocko", "Sandy", "Shelley", "Fred", "Junior", "Kathy", "Ralph"]);
+
+async function loadRatings() {
+  try {
+    const [list, filters] = await Promise.all(
+      ["../voices/en.json", "../voices/filters.json"].map((u) => fetch(new URL(u, import.meta.url)).then((r) => r.json())),
+    );
+    for (const v of list.voices) {
+      const ranks = (v.quality || []).map((q) => RANK[q]).filter((r) => r !== undefined).sort((a, b) => a - b);
+      if (!ranks.length) continue;
+      // Apple lists one name for up to three versions of a voice (basic,
+      // Enhanced, Premium), so its ratings are matched by suffix below.
+      if (v.localizedName === "apple") appleRanks.set(v.name, ranks);
+      else for (const name of [v.name, ...(v.altNames || [])]) ratedByName.set(name, ranks[ranks.length - 1]);
+    }
+    filters.novelty.forEach((n) => novelty.add(n));
+    filters.veryLowQuality.forEach((n) => veryLow.add(n));
+    notify();
+  } catch {
+    // Offline before the first load, or blocked: the name rules still work.
+  }
+}
+
+if (supported) loadRatings();
+
+// A number for how good a voice sounds, or -1 for voices nobody should
+// be offered: broken Edge entries ("undefined"), Apple's sound-effect
+// voices, and the very robotic ones.
+function quality(v) {
+  const name = v.name || "";
+  if (/undefined/i.test(name)) return -1;
+  const first = name.split(" (")[0].trim();
+  if (novelty.has(name) || novelty.has(first) || veryLow.has(name) || veryLow.has(first)) return -1;
+  if (ratedByName.has(name)) return ratedByName.get(name);
+  const apple = name.match(/^(.*?)\s*\((Premium|Enhanced)\)$/i);
+  const ranks = appleRanks.get(apple ? apple[1] : name);
+  if (ranks) {
+    if (!apple) return ranks[0];
+    const want = apple[2].toLowerCase() === "premium" ? RANK.high : RANK.normal;
+    return ranks.includes(want) ? want : ranks[ranks.length - 1];
+  }
+  if (/premium/i.test(name)) return RANK.high;
+  if (/enhanced|natural|neural/i.test(name)) return RANK.normal;
+  return RANK.low;
+}
+
+const langOf = (v) => (v.lang || "").replace("_", "-").toLowerCase();
+
+// Voices worth offering for a language, best first. Online voices send
+// the text to a server, so they're left out to keep text on the device.
+export function voicesFor(lang, allowOnline = false) {
+  // "en-US", "en-US@posix" or "en-US-u-…" all mean en-us here.
+  const own = ((navigator.language || "").toLowerCase().match(/^[a-z]{2,3}(?:-[a-z]{2})?/) || [""])[0];
+  const region = own.startsWith(lang + "-") ? own : lang === "en" ? "en-us" : null;
+  const score = (v) => quality(v) * 10 + (region && langOf(v) === region ? 3 : 0) + (v.default ? 1 : 0);
+  return voices
+    .filter((v) => langOf(v).split("-")[0] === lang)
+    .filter((v) => allowOnline || v.localService !== false)
+    .filter((v) => quality(v) >= 0 && !isBroken(v))
+    .sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
+}
+
+/* ---------- Voices that turned out not to work ---------- */
+
+// Safari can list voices it cannot actually play (for example a voice
+// whose download was removed), and there is no way to tell in advance.
+// When a voice fails, EasyRead remembers it here and stops offering it.
+// If the device's voices change (say a new download), every voice gets
+// another chance.
+const BROKEN_KEY = "easyread.brokenVoices";
+let brokenFor = "";
+const broken = new Set();
+const avoidThisVisit = new Set();
+
+function hashOf(text) {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+  return String(h);
+}
+
+try {
+  const saved = JSON.parse(localStorage.getItem(BROKEN_KEY) || "null");
+  if (saved && Array.isArray(saved.uris)) {
+    brokenFor = saved.list || "";
+    saved.uris.forEach((u) => broken.add(u));
+  }
+} catch {
+  // Storage blocked: nothing remembered.
+}
+
+function saveBroken() {
+  brokenFor = hashOf(voicesKey);
+  try {
+    localStorage.setItem(BROKEN_KEY, JSON.stringify({ list: brokenFor, uris: [...broken] }));
+  } catch {
+    // Storage blocked: remembered for this visit only.
+  }
+}
+
+function forgetBrokenIfVoicesChanged(key) {
+  if (broken.size && brokenFor && brokenFor !== hashOf(key)) {
+    broken.clear();
+    saveBroken();
+  }
+}
+
+export function isBroken(voice) {
+  return !!voice && (broken.has(voice.voiceURI) || avoidThisVisit.has(voice.voiceURI));
+}
+
+// Start reading the voice list only now, after everything above exists:
+// some browsers have their voices ready immediately.
 if (supported) {
   refreshVoices();
   if (synth.addEventListener) synth.addEventListener("voiceschanged", refreshVoices);
@@ -39,81 +161,9 @@ if (supported) {
   [250, 1000, 3000].forEach((ms) => setTimeout(refreshVoices, ms));
 }
 
-export function onVoicesChanged(fn) {
-  voiceListeners.add(fn);
-  return () => voiceListeners.delete(fn);
-}
-
-const langOf = (v) => (v.lang || "").replace("_", "-").toLowerCase();
-
-function score(v, region) {
-  let s = 0;
-  if (QUALITY.test(v.name)) s += 4;
-  if (region && langOf(v) === region) s += 2;
-  if (v.default) s += 1;
-  if (ROBOTIC.test(v.name)) s -= 3;
-  return s;
-}
-
-// Voices for a language, best first. Online voices send text to a
-// server, so they only appear when the user allows them.
-export function voicesFor(lang, allowOnline = false) {
-  const region = (navigator.language || "").toLowerCase();
-  const regionMatch = region.startsWith(lang) ? region : null;
-  return voices
-    .filter((v) => langOf(v).split("-")[0] === lang)
-    .filter((v) => allowOnline || v.localService !== false)
-    .filter((v) => !EFFECT_VOICES.test(v.name))
-    .sort((a, b) => score(b, regionMatch) - score(a, regionMatch) || a.name.localeCompare(b.name));
-}
-
-/* ---------- Voices that turned out not to work ---------- */
-
-// Safari can list voices it cannot actually play (for example a voice
-// whose download was removed), and there is no way to tell in advance.
-// When a voice fails, EasyRead remembers it here and uses another one.
-const BROKEN_KEY = "easyread.brokenVoices";
-const broken = new Set(readBroken());
-const avoidThisVisit = new Set();
-
-function readBroken() {
-  try {
-    return JSON.parse(localStorage.getItem(BROKEN_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveBroken() {
-  try {
-    localStorage.setItem(BROKEN_KEY, JSON.stringify([...broken]));
-  } catch {
-    // Storage blocked: remembered for this visit only.
-  }
-}
-
-export function isBroken(voice) {
-  return !!voice && (broken.has(voice.voiceURI) || avoidThisVisit.has(voice.voiceURI));
-}
-
-// Called when the reader picks a voice themselves: give it another try.
-export function forgiveVoice(voice) {
-  if (!voice) return;
-  avoidThisVisit.delete(voice.voiceURI);
-  if (broken.delete(voice.voiceURI)) saveBroken();
-}
-
-export const DEVICE_DEFAULT = "default";
-
-// savedURI "default" means "let the device choose" (no voice set).
 export function pickVoice(lang, savedURI, allowOnline) {
-  if (savedURI === DEVICE_DEFAULT) return null;
-  const list = voicesFor(lang, allowOnline).filter((v) => !isBroken(v));
+  const list = voicesFor(lang, allowOnline);
   return list.find((v) => v.voiceURI === savedURI) || list[0] || null;
-}
-
-export function voiceCount() {
-  return voices.length;
 }
 
 /* ---------- Audio session (iPhone) ---------- */
@@ -195,7 +245,7 @@ function findWord(words, charIndex) {
 
 export class Speaker {
   // handlers: onSentence(i, playing), onWord(i, wordIndex), onState(playing),
-  // onEnd(), onNoSound(), onUnsupported(),
+  // onEnd(), onNoSound(), onSound(), onUnsupported(),
   // onVoiceFailed(voice): the voice didn't play; choose another with setVoice()
   constructor(handlers = {}) {
     this.h = handlers;
@@ -374,16 +424,7 @@ export class Speaker {
     u.onstart = () => {
       if (!live()) return;
       started = true;
-      if (wordBoundaries && sentence.words.length >= 3) {
-        // Never fake word timing: no boundary after 1.2s means this
-        // browser or voice does not report words.
-        this._timer(() => {
-          if (live() && !gotWord && !done) {
-            wordBoundaries = false;
-            this.h.onWord?.(i, -1);
-          }
-        }, 1200);
-      }
+      this.h.onSound?.();
     };
 
     u.onboundary = (e) => {
@@ -411,6 +452,9 @@ export class Speaker {
         this._voiceFailed(true);
         return;
       }
+      // Never fake word timing: a whole sentence with no word events means
+      // this voice doesn't report words, so highlight sentences only.
+      if (!gotWord && sentence.words.length >= 3) wordBoundaries = false;
       next();
     };
     u.onerror = (e) => {
@@ -444,12 +488,13 @@ export class Speaker {
       synth.speak(u);
     }
 
-    // Nothing started: try the device's default voice once. If that
-    // doesn't start either, the problem is the sound, not the voice.
+    // Nothing heard after about a second: say so. Half a second later,
+    // try the next voice, in case it's this voice that can't play.
     this._timer(() => {
-      if (!live() || started || !this.playing) return;
-      if (this.voice) this._voiceFailed(false);
-      else this.h.onNoSound?.();
+      if (live() && !started && this.playing) this.h.onNoSound?.();
+    }, 1000);
+    this._timer(() => {
+      if (live() && !started && this.playing && this.voice) this._voiceFailed(false);
     }, 1500);
 
     if (this.voice && this.voice.localService === false && !isSafari) {

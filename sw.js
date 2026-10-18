@@ -3,7 +3,7 @@
 // up the next time someone opens the app. Everything else is cache-first.
 // Bump VERSION on every release, or devices keep the old files.
 
-const VERSION = "easyread-v7";
+const VERSION = "easyread-v8";
 
 const SHELL = [
   "./",
@@ -16,6 +16,8 @@ const SHELL = [
   "./js/voice-device.js",
   "./js/settings.js",
   "./js/library.js",
+  "./voices/en.json",
+  "./voices/filters.json",
   "./fonts/opendyslexic-latin-400-normal.woff2",
   "./fonts/opendyslexic-latin-700-normal.woff2",
   "./fonts/atkinson-hyperlegible-latin-400-normal.woff2",

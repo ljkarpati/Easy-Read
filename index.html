@@ -96,11 +96,16 @@
 
       <div class="player-area">
         <div class="player" id="player" role="group" aria-label="Read aloud">
-          <button class="player-btn" type="button" id="prev-btn" aria-label="Previous sentence"><svg class="icon filled"><use href="#i-skip-back"/></svg></button>
+          <div class="player-side" inert>
+            <button class="player-btn" type="button" id="prev-btn" aria-label="Previous sentence"><svg class="icon filled"><use href="#i-skip-back"/></svg></button>
+          </div>
           <button class="player-btn play" type="button" id="play-btn" aria-label="Play"><svg class="icon filled"><use href="#i-play"/></svg></button>
-          <button class="player-btn" type="button" id="next-btn" aria-label="Next sentence"><svg class="icon filled"><use href="#i-skip-forward"/></svg></button>
-          <button class="speed-btn" type="button" id="speed-btn" aria-label="Speed 1 times">1×</button>
+          <div class="player-side" inert>
+            <button class="player-btn" type="button" id="next-btn" aria-label="Next sentence"><svg class="icon filled"><use href="#i-skip-forward"/></svg></button>
+            <button class="speed-btn" type="button" id="speed-btn" aria-label="Speed 1 times">1×</button>
+          </div>
         </div>
+        <p class="player-line" id="no-sound" role="status" hidden>No sound? Check volume and the silent switch.</p>
         <div class="no-voice" id="no-voice" hidden>
           <p>For read-aloud, open in Safari or Chrome.</p>
           <button class="pill-btn small" type="button" id="copy-link"><svg class="icon"><use href="#i-copy"/></svg>Copy link</button>

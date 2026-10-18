@@ -3,7 +3,7 @@
 import * as settings from "./settings.js";
 import * as library from "./library.js";
 import { parse, detectLang, makeTitle } from "./text.js";
-import { Speaker, supported as speechSupported, voicesFor, pickVoice, onVoicesChanged, isIOS, isBroken, forgiveVoice, DEVICE_DEFAULT } from "./voice-device.js";
+import { Speaker, supported as speechSupported, voicesFor, pickVoice, onVoicesChanged, isIOS } from "./voice-device.js";
 import { Reader } from "./reader.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -36,7 +36,6 @@ Your text stays on this device.`;
 
 let currentId = null;
 let cameFromLibrary = false;
-let noSoundShown = false;
 
 /* ---------- Toast ---------- */
 
@@ -445,16 +444,23 @@ const speaker = new Speaker({
     const btn = $("#play-btn");
     btn.setAttribute("aria-label", playing ? "Pause" : "Play");
     btn.querySelector("use").setAttribute("href", playing ? "#i-pause" : "#i-play");
-    if (!playing) saveProgress(true);
+    // While reading, the play button grows into ⏮ ⏸ ⏭ 1×.
+    $("#player").classList.toggle("playing", playing);
+    for (const side of $$(".player-side")) side.inert = !playing;
+    if (!playing) {
+      $("#no-sound").hidden = true;
+      saveProgress(true);
+    }
   },
   onEnd() {
     reader.clearCurrent();
     if (currentId) library.update(currentId, { lastSentence: 0 }, { touch: false });
   },
   onNoSound() {
-    if (noSoundShown) return;
-    noSoundShown = true;
-    toast("No sound? Check volume and the silent switch.", 5000);
+    $("#no-sound").hidden = false;
+  },
+  onSound() {
+    $("#no-sound").hidden = true;
   },
   onUnsupported() {
     $("#no-voice").hidden = false;
@@ -535,7 +541,7 @@ function syncVoices() {
 
   const list = $("#voice-list");
   const rows = [{ uri: "", name: "Best available", note: !chosen && current ? current.name : "" }];
-  for (const v of voicesFor(speaker.lang, false)) rows.push({ uri: v.voiceURI, name: v.name, note: isBroken(v) ? "Didn’t play here" : "" });
+  for (const v of voicesFor(speaker.lang, false)) rows.push({ uri: v.voiceURI, name: v.name, note: "" });
   list.replaceChildren(...rows.map((r) => {
     const li = document.createElement("li");
     const b = document.createElement("button");
@@ -564,7 +570,6 @@ $("#voice-list").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-uri]");
   if (!b) return;
   const uri = b.dataset.uri;
-  if (uri) forgiveVoice(voicesFor(speaker.lang, true).find((v) => v.voiceURI === uri));
   settings.set({ voices: { ...settings.get().voices, [speaker.lang]: uri } });
   speaker.sample("This is how I sound.");
 });

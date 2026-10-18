@@ -67,6 +67,7 @@
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
   --dur: 250ms;
   --ease: cubic-bezier(0.32, 0.72, 0, 1); /* quick start, soft landing */
+  --spring: cubic-bezier(0.34, 1.36, 0.64, 1); /* a little overshoot, like a spring */
   --bar-h: 52px;
 
   --safe-t: env(safe-area-inset-top, 0px);
@@ -604,20 +605,42 @@ button:disabled { cursor: default; }
 
 .player-area > * { pointer-events: auto; }
 
+/* One round play button; while reading it grows into a pill. */
 .player {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
   max-width: calc(100% - 16px);
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  transition: padding var(--dur) var(--spring), background-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.player.playing {
   padding: 6px;
-  border-radius: 34px;
   background: var(--surface);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   backdrop-filter: blur(20px) saturate(1.4);
   box-shadow: var(--shadow);
 }
+
+.player-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-width var(--dur) var(--spring), opacity 200ms var(--ease);
+}
+
+.player.playing .player-side {
+  max-width: 180px;
+  opacity: 1;
+}
+
+.player.playing .player-side:first-child { padding-right: 6px; }
+.player.playing .player-side:last-child { padding-left: 6px; }
 
 .player-btn {
   display: grid;
@@ -630,10 +653,18 @@ button:disabled { cursor: default; }
 .player-btn:active { background: var(--fill); }
 
 .player-btn.play {
-  width: 56px;
-  height: 56px;
+  flex: none;
+  width: 60px;
+  height: 60px;
   background: var(--accent);
   color: var(--on-accent);
+  box-shadow: var(--shadow);
+}
+
+.player.playing .player-btn.play {
+  width: 56px;
+  height: 56px;
+  box-shadow: none;
 }
 
 .player-btn.play:active { transform: scale(0.94); background: var(--accent); }
@@ -653,6 +684,14 @@ button:disabled { cursor: default; }
 }
 
 .speed-btn:active { background: var(--fill-strong); }
+
+.player-line {
+  max-width: calc(100% - 32px);
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
 
 .no-voice {
   display: flex;
@@ -1096,9 +1135,11 @@ button:disabled { cursor: default; }
 /* ---------- Very narrow screens (small phones, or 200% zoom) ---------- */
 
 @media (max-width: 340px) {
-  .player { gap: 2px; padding: 4px; }
+  .player.playing { padding: 4px; }
+  .player-side { gap: 2px; }
   .player-btn { width: 44px; height: 44px; }
-  .player-btn.play { width: 48px; height: 48px; }
+  .player-btn.play,
+  .player.playing .player-btn.play { width: 48px; height: 48px; }
   .speed-btn { min-width: 44px; margin: 0; padding: 0 8px; }
 }
 
